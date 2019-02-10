@@ -75,6 +75,7 @@ namespace cvtt
 
             static MFloat ComputeErrorUniform(const MUInt15 pixelA[3], const MUInt15 pixelB[3]);
             static MFloat ComputeErrorWeighted(const MUInt15 reconstructed[3], const MFloat pixelB[3], const Options options);
+            static MFloat ComputeErrorFakeBT709(const MUInt15 reconstructed[3], const MFloat pixelB[3]);
             static void TestHalfBlock(MFloat &outError, MUInt16 &outSelectors, MUInt15 quantizedPackedColor, const MUInt15 pixels[8][3], const MFloat preWeightedPixels[8][3], const MSInt16 modifiers[4], bool isDifferential, const Options &options);
 
             static ParallelMath::Int16CompFlag ETCDifferentialIsLegalForChannel(const MUInt15 &a, const MUInt15 &b);
@@ -84,10 +85,17 @@ namespace cvtt
             static void EncodeTMode(uint8_t *outputBuffer, MFloat &bestError, const ParallelMath::Int16CompFlag isIsolated[16], const MUInt15 pixels[16][3], const MFloat preWeightedPixels[16][3], const Options &options);
             static void EncodeHMode(uint8_t *outputBuffer, MFloat &bestError, const ParallelMath::Int16CompFlag groupings[16], const MUInt15 pixels[16][3], HModeEval &he, const MFloat preWeightedPixels[16][3], const Options &options);
             static MUInt15 DecodePlanarCoeff(const MUInt15 &coeff, int ch);
-            static void EncodePlanar(uint8_t *outputBuffer, MFloat &bestError, const MUInt15 pixels[16][3]);
+            static void EncodePlanar(uint8_t *outputBuffer, MFloat &bestError, const MUInt15 pixels[16][3], const MFloat preWeightedPixels[16][3], const Options &options);
 
             static void CompressETC1BlockInternal(MFloat &bestTotalError, uint8_t *outputBuffer, const MUInt15 pixels[16][3], const MFloat preWeightedPixels[16][3], DifferentialResolveStorage& compressionData, const Options &options);
             static void ExtractBlocks(MUInt15 pixels[16][3], MFloat preWeightedPixels[16][3], const PixelBlockU8 *inputBlocks, const Options &options);
+
+            static void ResolveHalfBlockFakeBT709Rounding(MUInt15 quantized[3], const MUInt15 sectorCumulative[3], bool isDifferential);
+            static void ResolveTHFakeBT709Rounding(MUInt15 quantized[3], const MUInt15 target[3], const MUInt15 &granularity);
+            static void ConvertToFakeBT709(MFloat yuv[3], const MUInt15 color[3]);
+            static void ConvertToFakeBT709(MFloat yuv[3], const MFloat color[3]);
+            static void ConvertToFakeBT709(MFloat yuv[3], const MFloat &r, const MFloat &g, const MFloat &b);
+            static void ConvertFromFakeBT709(MFloat rgb[3], const MFloat yuv[3]);
         };
     }
 }

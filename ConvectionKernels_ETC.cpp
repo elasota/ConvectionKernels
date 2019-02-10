@@ -63,6 +63,18 @@ cvtt::ParallelMath::Float cvtt::Internal::ETCComputer::ComputeErrorWeighted(cons
     return dr * dr + dg * dg + db * db;
 }
 
+cvtt::ParallelMath::Float cvtt::Internal::ETCComputer::ComputeErrorFakeBT709(const MUInt15 reconstructed[3], const MFloat preWeightedPixel[3])
+{
+    MFloat yuv[3];
+    ConvertToFakeBT709(yuv, reconstructed);
+
+    MFloat dy = yuv[0] - preWeightedPixel[0];
+    MFloat du = yuv[1] - preWeightedPixel[1];
+    MFloat dv = yuv[2] - preWeightedPixel[2];
+
+    return dy * dy + du * du + dv * dv;
+}
+
 void cvtt::Internal::ETCComputer::TestHalfBlock(MFloat &outError, MUInt16 &outSelectors, MUInt15 quantizedPackedColor, const MUInt15 pixels[8][3], const MFloat preWeightedPixels[8][3], const MSInt16 modifiers[4], bool isDifferential, const Options &options)
 {
     MUInt15 quantized[3];
@@ -90,6 +102,7 @@ void cvtt::Internal::ETCComputer::TestHalfBlock(MFloat &outError, MUInt16 &outSe
             unquantizedModified[s][ch] = ParallelMath::Min(ParallelMath::ToUInt15(ParallelMath::Max(ParallelMath::ToSInt16(unquantized[ch]) + modifiers[s], s16_zero)), u15_255);
 
     bool isUniform = ((options.flags & cvtt::Flags::Uniform) != 0);
+    bool isFakeBT709 = ((options.flags & cvtt::Flags::ETC_UseFakeBT709) != 0);
 
     for (int px = 0; px < 8; px++)
     {
@@ -98,7 +111,14 @@ void cvtt::Internal::ETCComputer::TestHalfBlock(MFloat &outError, MUInt16 &outSe
 
         for (unsigned int s = 0; s < 4; s++)
         {
-            MFloat error = isUniform ? ComputeErrorUniform(pixels[px], unquantizedModified[s]) : ComputeErrorWeighted(unquantizedModified[s], preWeightedPixels[px], options);
+            MFloat error;
+            if (isFakeBT709)
+                error = ComputeErrorFakeBT709(unquantizedModified[s], preWeightedPixels[px]);
+            else if (isUniform)
+                error = ComputeErrorUniform(pixels[px], unquantizedModified[s]);
+            else
+                error = ComputeErrorWeighted(unquantizedModified[s], preWeightedPixels[px], options);
+
             ParallelMath::FloatCompFlag errorBetter = ParallelMath::Less(error, bestError);
             bestSelector = ParallelMath::Select(ParallelMath::FloatFlagToInt16(errorBetter), ParallelMath::MakeUInt16(s), bestSelector);
             bestError = ParallelMath::Min(error, bestError);
@@ -146,6 +166,9 @@ bool cvtt::Internal::ETCComputer::ETCDifferentialIsLegalScalar(const uint16_t &a
 
 void cvtt::Internal::ETCComputer::EncodeTMode(uint8_t *outputBuffer, MFloat &bestError, const ParallelMath::Int16CompFlag isIsolated[16], const MUInt15 pixels[16][3], const MFloat preWeightedPixels[16][3], const Options &options)
 {
+    bool isUniform = ((options.flags & cvtt::Flags::Uniform) != 0);
+    bool isFakeBT709 = ((options.flags & cvtt::Flags::ETC_UseFakeBT709) != 0);
+
     ParallelMath::Int16CompFlag bestIsThisMode = ParallelMath::MakeBoolInt16(false);
 
     MUInt15 isolatedTotal[3] = { ParallelMath::MakeUInt15(0), ParallelMath::MakeUInt15(0), ParallelMath::MakeUInt15(0) };
@@ -170,6 +193,7 @@ void cvtt::Internal::ETCComputer::EncodeTMode(uint8_t *outputBuffer, MFloat &bes
     MUInt15 numPixelsLine = ParallelMath::MakeUInt15(16) - numPixelsIsolated;
 
     MUInt15 isolatedAverageQuantized[3];
+    MUInt15 isolatedAverageTargets[3];
     {
         int divisors[ParallelMath::ParallelSize];
         for (int block = 0; block < ParallelMath::ParallelSize; block++)
@@ -180,7 +204,10 @@ void cvtt::Internal::ETCComputer::EncodeTMode(uint8_t *outputBuffer, MFloat &bes
         {
             // isolatedAverageQuantized[ch] = (isolatedTotal[ch] * 2 + numPixelsIsolated * 17) / (numPixelsIsolated * 34);
 
-            MUInt15 numerator = isolatedTotal[ch] + isolatedTotal[ch] + addend;
+            MUInt15 numerator = isolatedTotal[ch] + isolatedTotal[ch];
+            if (!isFakeBT709)
+                numerator = numerator + addend;
+
             for (int block = 0; block < ParallelMath::ParallelSize; block++)
             {
                 int divisor = divisors[block];
@@ -189,18 +216,28 @@ void cvtt::Internal::ETCComputer::EncodeTMode(uint8_t *outputBuffer, MFloat &bes
                 else
                     ParallelMath::PutUInt15(isolatedAverageQuantized[ch], block, ParallelMath::Extract(numerator, block) / divisor);
             }
+
+            isolatedAverageTargets[ch] = numerator;
         }
     }
+
+    if (isFakeBT709)
+        ResolveTHFakeBT709Rounding(isolatedAverageQuantized, isolatedAverageTargets, numPixelsIsolated);
 
     MUInt15 isolatedColor[3];
     for (int ch = 0; ch < 3; ch++)
         isolatedColor[ch] = (isolatedAverageQuantized[ch]) | (isolatedAverageQuantized[ch] << 4);
 
-    bool isUniform = ((options.flags & cvtt::Flags::Uniform) != 0);
-
     MFloat isolatedError[16];
     for (int px = 0; px < 16; px++)
-        isolatedError[px] = isUniform ? ComputeErrorUniform(pixels[px], isolatedColor) : ComputeErrorWeighted(isolatedColor, preWeightedPixels[px], options);
+    {
+        if (isFakeBT709)
+            isolatedError[px] = ComputeErrorFakeBT709(isolatedColor, preWeightedPixels[px]);
+        else if (isUniform)
+            isolatedError[px] = ComputeErrorUniform(pixels[px], isolatedColor);
+        else
+            isolatedError[px] = ComputeErrorWeighted(isolatedColor, preWeightedPixels[px], options);
+    }
 
     MSInt32 bestSelectors = ParallelMath::MakeSInt32(0);
     MUInt15 bestTable = ParallelMath::MakeUInt15(0);
@@ -234,7 +271,7 @@ void cvtt::Internal::ETCComputer::EncodeTMode(uint8_t *outputBuffer, MFloat &bes
             numUniqueColors[block] = 0;
 
         MUInt15 modifier = ParallelMath::MakeUInt15(cvtt::Tables::ETC2::g_thModifierTable[table]);
-        MUInt15 modifierOffset = ParallelMath::ToUInt15(ParallelMath::CompactMultiply((modifier + modifier), numPixelsLine));
+        MUInt15 modifierOffset = (modifier + modifier);
 
         for (int16_t offsetPremultiplier = clusterMinLine; offsetPremultiplier <= clusterMaxLine; offsetPremultiplier++)
         {
@@ -242,20 +279,45 @@ void cvtt::Internal::ETCComputer::EncodeTMode(uint8_t *outputBuffer, MFloat &bes
             MSInt16 modifierAddend = ParallelMath::CompactMultiply(clampedOffsetPremultiplier, modifierOffset);
 
             MUInt15 quantized[3];
-            for (int ch = 0; ch < 3; ch++)
+            if (isFakeBT709)
             {
-                //quantized[ch] = std::min<int16_t>(15, std::max(0, (lineTotal[ch] * 2 + numDAIILine * 17 + modifierOffset * offsetPremultiplier)) / (numDAIILine * 34));
-                MUInt15 numerator = ParallelMath::LosslessCast<MUInt15>::Cast(ParallelMath::Max(ParallelMath::MakeSInt16(0), ParallelMath::LosslessCast<MSInt16>::Cast(lineTotal[ch] + lineTotal[ch] + lineAddend) + modifierAddend));
-                MUInt15 divided = ParallelMath::MakeUInt15(0);
-                for (int block = 0; block < ParallelMath::ParallelSize; block++)
+                MUInt15 targets[3];
+                for (int ch = 0; ch < 3; ch++)
                 {
-                    int divisor = lineDivisors[block];
-                    if (divisor == 0)
-                        ParallelMath::PutUInt15(divided, block, 0);
-                    else
-                        ParallelMath::PutUInt15(divided, block, ParallelMath::Extract(numerator, block) / divisor);
+                    //quantized[ch] = std::min<int16_t>(15, std::max(0, (lineTotal[ch] * 2 + modifierOffset * offsetPremultiplier)) / (numDAIILine * 34));
+                    MUInt15 numerator = ParallelMath::LosslessCast<MUInt15>::Cast(ParallelMath::Max(ParallelMath::MakeSInt16(0), ParallelMath::LosslessCast<MSInt16>::Cast(lineTotal[ch] + lineTotal[ch]) + modifierAddend));
+                    MUInt15 divided = ParallelMath::MakeUInt15(0);
+                    for (int block = 0; block < ParallelMath::ParallelSize; block++)
+                    {
+                        int divisor = lineDivisors[block];
+                        if (divisor == 0)
+                            ParallelMath::PutUInt15(divided, block, 0);
+                        else
+                            ParallelMath::PutUInt15(divided, block, ParallelMath::Extract(numerator, block) / divisor);
+                    }
+                    quantized[ch] = ParallelMath::Min(ParallelMath::MakeUInt15(15), divided);
+                    targets[ch] = numerator;
                 }
-                quantized[ch] = ParallelMath::Min(ParallelMath::MakeUInt15(15), divided);
+
+                ResolveTHFakeBT709Rounding(quantized, targets, numPixelsLine);
+            }
+            else
+            {
+                for (int ch = 0; ch < 3; ch++)
+                {
+                    //quantized[ch] = std::min<int16_t>(15, std::max(0, (lineTotal[ch] * 2 + numDAIILine * 17 + modifierOffset * offsetPremultiplier)) / (numDAIILine * 34));
+                    MUInt15 numerator = ParallelMath::LosslessCast<MUInt15>::Cast(ParallelMath::Max(ParallelMath::MakeSInt16(0), ParallelMath::LosslessCast<MSInt16>::Cast(lineTotal[ch] + lineTotal[ch] + lineAddend) + modifierAddend));
+                    MUInt15 divided = ParallelMath::MakeUInt15(0);
+                    for (int block = 0; block < ParallelMath::ParallelSize; block++)
+                    {
+                        int divisor = lineDivisors[block];
+                        if (divisor == 0)
+                            ParallelMath::PutUInt15(divided, block, 0);
+                        else
+                            ParallelMath::PutUInt15(divided, block, ParallelMath::Extract(numerator, block) / divisor);
+                    }
+                    quantized[ch] = ParallelMath::Min(ParallelMath::MakeUInt15(15), divided);
+                }
             }
 
             MUInt15 packedColor = quantized[0] | (quantized[1] << 5) | (quantized[2] << 10);
@@ -396,6 +458,9 @@ void cvtt::Internal::ETCComputer::EncodeTMode(uint8_t *outputBuffer, MFloat &bes
 
 void cvtt::Internal::ETCComputer::EncodeHMode(uint8_t *outputBuffer, MFloat &bestError, const ParallelMath::Int16CompFlag groupings[16], const MUInt15 pixels[16][3], HModeEval &he, const MFloat preWeightedPixels[16][3], const Options &options)
 {
+    bool isUniform = ((options.flags & cvtt::Flags::Uniform) != 0);
+    bool isFakeBT709 = ((options.flags & cvtt::Flags::ETC_UseFakeBT709) != 0);
+
     MUInt15 zero15 = ParallelMath::MakeUInt15(0);
 
     MUInt15 counts[2] = { zero15, zero15 };
@@ -427,8 +492,6 @@ void cvtt::Internal::ETCComputer::EncodeHMode(uint8_t *outputBuffer, MFloat &bes
     MUInt15 bestColors[2] = { zero15, zero15 };
     MUInt15 bestTable = ParallelMath::MakeUInt15(0);
 
-    bool isUniform = ((options.flags & cvtt::Flags::Uniform) != 0);
-
     for (int table = 0; table < 8; table++)
     {
         MUInt15 numUniqueColors = zero15;
@@ -445,7 +508,7 @@ void cvtt::Internal::ETCComputer::EncodeHMode(uint8_t *outputBuffer, MFloat &bes
                 int maxOffsetMultiplier = ParallelMath::Extract(counts[sector], block);
                 int minOffsetMultiplier = -maxOffsetMultiplier;
 
-                int modifierOffset = modifier * 2 * ParallelMath::Extract(counts[sector], block);
+                int modifierOffset = modifier * 2;
 
                 int blockSectorCounts = ParallelMath::Extract(counts[sector], block);
                 int blockSectorTotals[3];
@@ -454,6 +517,7 @@ void cvtt::Internal::ETCComputer::EncodeHMode(uint8_t *outputBuffer, MFloat &bes
 
                 for (int offsetPremultiplier = minOffsetMultiplier; offsetPremultiplier <= maxOffsetMultiplier; offsetPremultiplier++)
                 {
+                    // TODO: This isn't ideal for FakeBT709
                     int16_t quantized[3];
                     for (int ch = 0; ch < 3; ch++)
                     {
@@ -516,7 +580,14 @@ void cvtt::Internal::ETCComputer::EncodeHMode(uint8_t *outputBuffer, MFloat &bes
             {
                 MFloat errors[2];
                 for (int i = 0; i < 2; i++)
-                    errors[i] = isUniform ? ComputeErrorUniform(colors[i], pixels[px]) : ComputeErrorWeighted(colors[i], preWeightedPixels[px], options);
+                {
+                    if (isFakeBT709)
+                        errors[i] = ComputeErrorFakeBT709(colors[i], preWeightedPixels[px]);
+                    else if (isUniform)
+                        errors[i] = ComputeErrorUniform(colors[i], pixels[px]);
+                    else
+                        errors[i] = ComputeErrorWeighted(colors[i], preWeightedPixels[px], options);
+                }
 
                 ParallelMath::Int16CompFlag errorOneLess = ParallelMath::FloatFlagToInt16(ParallelMath::Less(errors[1], errors[0]));
                 he.errors[ci][px] = ParallelMath::Min(errors[0], errors[1]);
@@ -583,13 +654,12 @@ void cvtt::Internal::ETCComputer::EncodeHMode(uint8_t *outputBuffer, MFloat &bes
 
                 totalError = totalError + ParallelMath::Min(errorCI0, errorCI1);
 
-                MUInt16 signMask = ParallelMath::MakeUInt16(1 << px);
-                MUInt16 signBit = ParallelMath::MakeUInt16(0);
+                MUInt16 bitPosition = ParallelMath::MakeUInt16(1 << px);
 
                 ParallelMath::Int16CompFlag error1Better = ParallelMath::FloatFlagToInt16(ParallelMath::Less(errorCI1, errorCI0));
 
-                sectorBits = sectorBits | ParallelMath::SelectOrZero(error1Better, ParallelMath::MakeUInt16(1 << px));
-                signBits = signBits | (signMask & ParallelMath::Select(error1Better, signBits1, signBits0));
+                sectorBits = sectorBits | ParallelMath::SelectOrZero(error1Better, bitPosition);
+                signBits = signBits | (bitPosition & ParallelMath::Select(error1Better, signBits1, signBits0));
             }
 
             ParallelMath::FloatCompFlag totalErrorBetter = ParallelMath::Less(totalError, bestError);
@@ -708,7 +778,7 @@ cvtt::ParallelMath::UInt15 cvtt::Internal::ETCComputer::DecodePlanarCoeff(const 
         return (coeff << 2) | (ParallelMath::RightShift(coeff, 4));
 }
 
-void cvtt::Internal::ETCComputer::EncodePlanar(uint8_t *outputBuffer, MFloat &bestError, const MUInt15 pixels[16][3])
+void cvtt::Internal::ETCComputer::EncodePlanar(uint8_t *outputBuffer, MFloat &bestError, const MUInt15 pixels[16][3], const MFloat preWeightedPixels[16][3], const Options &options)
 {
     // NOTE: If it's desired to do this in another color space, the best way to do it would probably be
     // to do everything in that color space and then transform it back to RGB.
@@ -716,6 +786,12 @@ void cvtt::Internal::ETCComputer::EncodePlanar(uint8_t *outputBuffer, MFloat &be
     // We compute H = (H-O)/4 and V= (V-O)/4 to simplify the math
 
     // error = (x*H + y*V + O - C)^2
+    MFloat h[3] = { ParallelMath::MakeFloatZero(), ParallelMath::MakeFloatZero(), ParallelMath::MakeFloatZero() };
+    MFloat v[3] = { ParallelMath::MakeFloatZero(), ParallelMath::MakeFloatZero(), ParallelMath::MakeFloatZero() };
+    MFloat o[3] = { ParallelMath::MakeFloatZero(), ParallelMath::MakeFloatZero(), ParallelMath::MakeFloatZero() };
+
+    bool isFakeBT709 = ((options.flags & cvtt::Flags::ETC_UseFakeBT709) != 0);
+    bool isUniform = ((options.flags & cvtt::Flags::Uniform) != 0);
 
     MFloat totalError = ParallelMath::MakeFloatZero();
     MUInt15 bestCoeffs[3][3];	// [Channel][Coeff]
@@ -736,15 +812,11 @@ void cvtt::Internal::ETCComputer::EncodePlanar(uint8_t *outputBuffer, MFloat &be
         float &fvh = fhv;
         float &fvo = fov;
 
-        MFloat h = ParallelMath::MakeFloatZero();
-        MFloat v = ParallelMath::MakeFloatZero();
-        MFloat o = ParallelMath::MakeFloatZero();
-
         for (int px = 0; px < 16; px++)
         {
             float x = static_cast<float>(px % 4);
             float y = static_cast<float>(px / 4);
-            MFloat c = ParallelMath::ToFloat(pixels[px][ch]);
+            MFloat c = isFakeBT709 ? preWeightedPixels[px][ch] : ParallelMath::ToFloat(pixels[px][ch]);
 
             // (x*H + y*V + O - C)^2
             fhh += x * x;
@@ -769,9 +841,6 @@ void cvtt::Internal::ETCComputer::EncodePlanar(uint8_t *outputBuffer, MFloat &be
         }
 
         //float totalError = fhh * h * h + fho * h*o + fhv * h*v + foo * o * o + fov * o*v + fvv * v * v + fh * h + fv * v + fo * o + fc;
-        MFloat dErrorDH = fh + h * (2.0f * fhh) + o * fho + v * fhv;
-        MFloat dErrorDV = fv + h * fhv + o * fov + v * (2.0f * fvv);
-        MFloat dErrorDO = fo + h * fho + o * (2.0f * foo) + v * fov;
 
         // error = fhh*h^2 + fho*h*o + fhv*h*v + foo*o^2 + fov*o*v + fvv*v^2 + fh*h + fv*v + fo*o + fc
         // derror/dh = 2*fhh*h + fho*o + fhv*v + fh
@@ -822,7 +891,7 @@ void cvtt::Internal::ETCComputer::EncodePlanar(uint8_t *outputBuffer, MFloat &be
             float n2 = n1 + r1to2 * j1;
             MFloat q2D = q1D + l1D * r1to2;
 
-            o = -q2D / n2;
+            o[ch] = -q2D / n2;
 
             // Factor out second column from R1
             // 0 n2 0 q2D
@@ -841,84 +910,174 @@ void cvtt::Internal::ETCComputer::EncodePlanar(uint8_t *outputBuffer, MFloat &be
 
             // n2*o + q2 = 0
             // o = -q2 / n2
-            h = -g2D / d;
-            v = -l2D / k1;
+            h[ch] = -g2D / d;
+            v[ch] = -l2D / k1;
         }
 
-        h = h * 4.0 + o;
-        v = v * 4.0 + o;
+        // Undo the local transformation
+        h[ch] = h[ch] * 4.0f + o[ch];
+        v[ch] = v[ch] * 4.0f + o[ch];
+    }
 
-        MFloat fcoeffs[3] = { o, h, v };
-        MUInt15 coeffRanges[3][2];
+    if (isFakeBT709)
+    {
+        MFloat oRGB[3];
+        MFloat hRGB[3];
+        MFloat vRGB[3];
 
-        for (int c = 0; c < 3; c++)
+        ConvertFromFakeBT709(oRGB, o);
+        ConvertFromFakeBT709(hRGB, h);
+        ConvertFromFakeBT709(vRGB, v);
+
+        // Twiddling in fake BT.607 is a mess, just round off for now (the precision is pretty good anyway)
         {
-            MFloat coeff = ParallelMath::Max(ParallelMath::MakeFloatZero(), fcoeffs[c]);
-            if (ch == 1)
-                coeff = ParallelMath::Min(ParallelMath::MakeFloat(127.0f), coeff * (127.0f / 255.0f) + 0.5f);
-            else
-                coeff = ParallelMath::Min(ParallelMath::MakeFloat(63.0f), coeff * (63.0f / 255.0f) + 0.5f);
-            fcoeffs[c] = coeff;
-        }
+            ParallelMath::RoundTowardNearestForScope rtn;
 
-        {
-            ParallelMath::RoundDownForScope rd;
-            for (int c = 0; c < 3; c++)
-                coeffRanges[c][0] = ParallelMath::RoundAndConvertToU15(fcoeffs[c], &rd);
-        }
-
-        {
-            ParallelMath::RoundUpForScope ru;
-            for (int c = 0; c < 3; c++)
-                coeffRanges[c][1] = ParallelMath::RoundAndConvertToU15(fcoeffs[c], &ru);
-        }
-
-        MFloat bestChannelError = ParallelMath::MakeFloat(FLT_MAX);
-        for (int io = 0; io < 2; io++)
-        {
-            MUInt15 dO = DecodePlanarCoeff(coeffRanges[0][io], ch);
-
-            for (int ih = 0; ih < 2; ih++)
+            for (int ch = 0; ch < 3; ch++)
             {
-                MUInt15 dH = DecodePlanarCoeff(coeffRanges[1][ih], ch);
+                MFloat fcoeffs[3] = { oRGB[ch], hRGB[ch], vRGB[ch] };
 
-                for (int iv = 0; iv < 2; iv++)
+                for (int c = 0; c < 3; c++)
                 {
-                    MUInt15 dV = DecodePlanarCoeff(coeffRanges[2][iv], ch);
-
-                    MFloat error = ParallelMath::MakeFloatZero();
-
-                    MSInt16 addend = ParallelMath::LosslessCast<MSInt16>::Cast(dO << 2) + 2;
-
-                    for (int px = 0; px < 16; px++)
-                    {
-                        MUInt15 pxv = ParallelMath::MakeUInt15(px);
-                        MSInt16 x = ParallelMath::LosslessCast<MSInt16>::Cast(pxv & ParallelMath::MakeUInt15(3));
-                        MSInt16 y = ParallelMath::LosslessCast<MSInt16>::Cast(ParallelMath::RightShift(pxv, 2));
-
-                        MSInt16 interpolated = ParallelMath::RightShift(ParallelMath::CompactMultiply(x, (dH - dO)) + ParallelMath::CompactMultiply(y, (dV - dO)) + addend, 2);
-                        MUInt15 clampedLow = ParallelMath::ToUInt15(ParallelMath::Max(ParallelMath::MakeSInt16(0), interpolated));
-                        MUInt15 dec = ParallelMath::Min(ParallelMath::MakeUInt15(255), clampedLow);
-
-                        MSInt16 delta = ParallelMath::LosslessCast<MSInt16>::Cast(pixels[px][ch]) - ParallelMath::LosslessCast<MSInt16>::Cast(dec);
-
-                        MFloat deltaF = ParallelMath::ToFloat(delta);
-                        error = error + deltaF * deltaF;
-                    }
-
-                    ParallelMath::Int16CompFlag errorBetter = ParallelMath::FloatFlagToInt16(ParallelMath::Less(error, bestChannelError));
-                    if (ParallelMath::AnySet(errorBetter))
-                    {
-                        bestChannelError = ParallelMath::Min(error, bestChannelError);
-                        ParallelMath::ConditionalSet(bestCoeffs[ch][0], errorBetter, coeffRanges[0][io]);
-                        ParallelMath::ConditionalSet(bestCoeffs[ch][1], errorBetter, coeffRanges[1][ih]);
-                        ParallelMath::ConditionalSet(bestCoeffs[ch][2], errorBetter, coeffRanges[2][iv]);
-                    }
+                    MFloat coeff = ParallelMath::Max(ParallelMath::MakeFloatZero(), fcoeffs[c]);
+                    if (ch == 1)
+                        coeff = ParallelMath::Min(ParallelMath::MakeFloat(127.0f), coeff * (127.0f / 255.0f));
+                    else
+                        coeff = ParallelMath::Min(ParallelMath::MakeFloat(63.0f), coeff * (63.0f / 255.0f));
+                    fcoeffs[c] = coeff;
                 }
+
+                for (int c = 0; c < 3; c++)
+                    bestCoeffs[ch][c] = ParallelMath::RoundAndConvertToU15(fcoeffs[c], &rtn);
             }
         }
 
-        totalError = totalError + bestChannelError;
+        MUInt15 reconstructed[16][3];
+        for (int ch = 0; ch < 3; ch++)
+        {
+            MUInt15 dO = DecodePlanarCoeff(bestCoeffs[ch][0], ch);
+            MUInt15 dH = DecodePlanarCoeff(bestCoeffs[ch][1], ch);
+            MUInt15 dV = DecodePlanarCoeff(bestCoeffs[ch][2], ch);
+
+            MSInt16 hMinusO = ParallelMath::LosslessCast<MSInt16>::Cast(dH) - ParallelMath::LosslessCast<MSInt16>::Cast(dO);
+            MSInt16 vMinusO = ParallelMath::LosslessCast<MSInt16>::Cast(dV) - ParallelMath::LosslessCast<MSInt16>::Cast(dO);
+
+            MFloat error = ParallelMath::MakeFloatZero();
+
+            MSInt16 addend = ParallelMath::LosslessCast<MSInt16>::Cast(dO << 2) + 2;
+
+            for (int px = 0; px < 16; px++)
+            {
+                MUInt15 pxv = ParallelMath::MakeUInt15(px);
+                MSInt16 x = ParallelMath::LosslessCast<MSInt16>::Cast(pxv & ParallelMath::MakeUInt15(3));
+                MSInt16 y = ParallelMath::LosslessCast<MSInt16>::Cast(ParallelMath::RightShift(pxv, 2));
+
+                MSInt16 interpolated = ParallelMath::RightShift(ParallelMath::CompactMultiply(x, hMinusO) + ParallelMath::CompactMultiply(y, vMinusO) + addend, 2);
+                MUInt15 clampedLow = ParallelMath::ToUInt15(ParallelMath::Max(ParallelMath::MakeSInt16(0), interpolated));
+                reconstructed[px][ch] = ParallelMath::Min(ParallelMath::MakeUInt15(255), clampedLow);
+            }
+        }
+
+        totalError = ParallelMath::MakeFloatZero();
+        for (int px = 0; px < 16; px++)
+            totalError = totalError + ComputeErrorFakeBT709(reconstructed[px], preWeightedPixels[px]);
+    }
+    else
+    {
+        for (int ch = 0; ch < 3; ch++)
+        {
+            MFloat fcoeffs[3] = { o[ch], h[ch], v[ch] };
+            MUInt15 coeffRanges[3][2];
+
+            for (int c = 0; c < 3; c++)
+            {
+                MFloat coeff = ParallelMath::Max(ParallelMath::MakeFloatZero(), fcoeffs[c]);
+                if (ch == 1)
+                    coeff = ParallelMath::Min(ParallelMath::MakeFloat(127.0f), coeff * (127.0f / 255.0f));
+                else
+                    coeff = ParallelMath::Min(ParallelMath::MakeFloat(63.0f), coeff * (63.0f / 255.0f));
+                fcoeffs[c] = coeff;
+            }
+
+            {
+                ParallelMath::RoundDownForScope rd;
+                for (int c = 0; c < 3; c++)
+                    coeffRanges[c][0] = ParallelMath::RoundAndConvertToU15(fcoeffs[c], &rd);
+            }
+
+            {
+                ParallelMath::RoundUpForScope ru;
+                for (int c = 0; c < 3; c++)
+                    coeffRanges[c][1] = ParallelMath::RoundAndConvertToU15(fcoeffs[c], &ru);
+            }
+
+            MFloat bestChannelError = ParallelMath::MakeFloat(FLT_MAX);
+            for (int io = 0; io < 2; io++)
+            {
+                MUInt15 dO = DecodePlanarCoeff(coeffRanges[0][io], ch);
+
+                for (int ih = 0; ih < 2; ih++)
+                {
+                    MUInt15 dH = DecodePlanarCoeff(coeffRanges[1][ih], ch);
+                    MSInt16 hMinusO = ParallelMath::LosslessCast<MSInt16>::Cast(dH) - ParallelMath::LosslessCast<MSInt16>::Cast(dO);
+
+                    for (int iv = 0; iv < 2; iv++)
+                    {
+                        MUInt15 dV = DecodePlanarCoeff(coeffRanges[2][iv], ch);
+                        MSInt16 vMinusO = ParallelMath::LosslessCast<MSInt16>::Cast(dV) - ParallelMath::LosslessCast<MSInt16>::Cast(dO);
+
+                        MFloat error = ParallelMath::MakeFloatZero();
+
+                        MSInt16 addend = ParallelMath::LosslessCast<MSInt16>::Cast(dO << 2) + 2;
+
+                        for (int px = 0; px < 16; px++)
+                        {
+                            MUInt15 pxv = ParallelMath::MakeUInt15(px);
+                            MSInt16 x = ParallelMath::LosslessCast<MSInt16>::Cast(pxv & ParallelMath::MakeUInt15(3));
+                            MSInt16 y = ParallelMath::LosslessCast<MSInt16>::Cast(ParallelMath::RightShift(pxv, 2));
+
+                            MSInt16 interpolated = ParallelMath::RightShift(ParallelMath::CompactMultiply(x, hMinusO) + ParallelMath::CompactMultiply(y, vMinusO) + addend, 2);
+                            MUInt15 clampedLow = ParallelMath::ToUInt15(ParallelMath::Max(ParallelMath::MakeSInt16(0), interpolated));
+                            MUInt15 dec = ParallelMath::Min(ParallelMath::MakeUInt15(255), clampedLow);
+
+                            MSInt16 delta = ParallelMath::LosslessCast<MSInt16>::Cast(pixels[px][ch]) - ParallelMath::LosslessCast<MSInt16>::Cast(dec);
+
+                            MFloat deltaF = ParallelMath::ToFloat(delta);
+                            error = error + deltaF * deltaF;
+                        }
+
+                        ParallelMath::Int16CompFlag errorBetter = ParallelMath::FloatFlagToInt16(ParallelMath::Less(error, bestChannelError));
+                        if (ParallelMath::AnySet(errorBetter))
+                        {
+                            bestChannelError = ParallelMath::Min(error, bestChannelError);
+                            ParallelMath::ConditionalSet(bestCoeffs[ch][0], errorBetter, coeffRanges[0][io]);
+                            ParallelMath::ConditionalSet(bestCoeffs[ch][1], errorBetter, coeffRanges[1][ih]);
+                            ParallelMath::ConditionalSet(bestCoeffs[ch][2], errorBetter, coeffRanges[2][iv]);
+                        }
+                    }
+                }
+            }
+
+            if (!isUniform)
+            {
+                switch (ch)
+                {
+                case 0:
+                    bestChannelError = bestChannelError * (options.redWeight * options.redWeight);
+                    break;
+                case 1:
+                    bestChannelError = bestChannelError * (options.greenWeight * options.greenWeight);
+                    break;
+                case 2:
+                    bestChannelError = bestChannelError * (options.blueWeight * options.blueWeight);
+                    break;
+                default:
+                    break;
+                }
+            }
+
+            totalError = totalError + bestChannelError;
+        }
     }
 
     ParallelMath::Int16CompFlag errorBetter = ParallelMath::FloatFlagToInt16(ParallelMath::Less(totalError, bestError));
@@ -1019,7 +1178,7 @@ void cvtt::Internal::ETCComputer::CompressETC2Block(uint8_t *outputBuffer, const
     MFloat preWeightedPixels[16][3];
     ExtractBlocks(pixels, preWeightedPixels, pixelBlocks, options);
 
-    EncodePlanar(outputBuffer, bestError, pixels);
+    EncodePlanar(outputBuffer, bestError, pixels, preWeightedPixels, options);
 
     MSInt16 chromaCoordinates3[16][2];
     for (int px = 0; px < 16; px++)
@@ -1103,6 +1262,9 @@ void cvtt::Internal::ETCComputer::CompressETC1Block(uint8_t *outputBuffer, const
 
 void cvtt::Internal::ETCComputer::ExtractBlocks(MUInt15 pixels[16][3], MFloat preWeightedPixels[16][3], const PixelBlockU8 *inputBlocks, const Options &options)
 {
+    bool isFakeBT709 = ((options.flags & cvtt::Flags::ETC_UseFakeBT709) != 0);
+    bool isUniform = ((options.flags & cvtt::Flags::Uniform) != 0);
+
     for (int px = 0; px < 16; px++)
     {
         for (int ch = 0; ch < 3; ch++)
@@ -1111,10 +1273,152 @@ void cvtt::Internal::ETCComputer::ExtractBlocks(MUInt15 pixels[16][3], MFloat pr
                 ParallelMath::PutUInt15(pixels[px][ch], block, inputBlocks[block].m_pixels[px][ch]);
         }
 
-        preWeightedPixels[px][0] = ParallelMath::ToFloat(pixels[px][0]) * options.redWeight;
-        preWeightedPixels[px][1] = ParallelMath::ToFloat(pixels[px][1]) * options.greenWeight;
-        preWeightedPixels[px][2] = ParallelMath::ToFloat(pixels[px][2]) * options.blueWeight;
+        if (isFakeBT709)
+            ConvertToFakeBT709(preWeightedPixels[px], pixels[px]);
+        else if (isUniform)
+        {
+            for (int ch = 0; ch < 3; ch++)
+                preWeightedPixels[px][ch] = ParallelMath::ToFloat(pixels[px][ch]);
+        }
+        else
+        {
+            preWeightedPixels[px][0] = ParallelMath::ToFloat(pixels[px][0]) * options.redWeight;
+            preWeightedPixels[px][1] = ParallelMath::ToFloat(pixels[px][1]) * options.greenWeight;
+            preWeightedPixels[px][2] = ParallelMath::ToFloat(pixels[px][2]) * options.blueWeight;
+        }
     }
+}
+
+void cvtt::Internal::ETCComputer::ResolveHalfBlockFakeBT709Rounding(MUInt15 quantized[3], const MUInt15 sectorCumulative[3], bool isDifferential)
+{
+    MFloat lowOctantRGBFloat[3];
+    MFloat highOctantRGBFloat[3];
+
+    for (int ch = 0; ch < 3; ch++)
+    {
+        MUInt15 unquantized;
+        MUInt15 unquantizedNext;
+        if (isDifferential)
+        {
+            unquantized = (quantized[ch] << 3) | ParallelMath::RightShift(quantized[ch], 2);
+            MUInt15 quantizedNext = ParallelMath::Min(ParallelMath::MakeUInt15(31), quantized[ch] + ParallelMath::MakeUInt15(1));
+            unquantizedNext = (quantizedNext << 3) | ParallelMath::RightShift(quantizedNext, 2);
+        }
+        else
+        {
+            unquantized = (quantized[ch] << 4) | quantized[ch];
+            unquantizedNext = ParallelMath::Min(ParallelMath::MakeUInt15(255), unquantized + ParallelMath::MakeUInt15(17));
+        }
+        lowOctantRGBFloat[ch] = ParallelMath::ToFloat(unquantized << 3);
+        highOctantRGBFloat[ch] = ParallelMath::ToFloat(unquantizedNext << 3);
+    }
+
+    MFloat bestError = ParallelMath::MakeFloat(FLT_MAX);
+    MUInt15 bestOctant = ParallelMath::MakeUInt15(0);
+
+    MFloat cumulativeYUV[3];
+    ConvertToFakeBT709(cumulativeYUV, sectorCumulative);
+
+    for (uint16_t octant = 0; octant < 8; octant++)
+    {
+        const MFloat &r = (octant & 1) ? highOctantRGBFloat[0] : lowOctantRGBFloat[0];
+        const MFloat &g = (octant & 2) ? highOctantRGBFloat[1] : lowOctantRGBFloat[1];
+        const MFloat &b = (octant & 4) ? highOctantRGBFloat[2] : lowOctantRGBFloat[2];
+
+        MFloat octantYUV[3];
+        ConvertToFakeBT709(octantYUV, r, g, b);
+
+        MFloat delta[3];
+        for (int ch = 0; ch < 3; ch++)
+            delta[ch] = octantYUV[ch] - cumulativeYUV[ch];
+
+        MFloat error = delta[0] * delta[0] + delta[1] + delta[1] + delta[2] * delta[2];
+        ParallelMath::Int16CompFlag errorBetter = ParallelMath::FloatFlagToInt16(ParallelMath::Less(error, bestError));
+        ParallelMath::ConditionalSet(bestOctant, errorBetter, ParallelMath::MakeUInt15(octant));
+        bestError = ParallelMath::Min(error, bestError);
+    }
+
+    for (int ch = 0; ch < 3; ch++)
+        quantized[ch] = quantized[ch] + (ParallelMath::RightShift(bestOctant, ch) & ParallelMath::MakeUInt15(1));
+}
+
+void cvtt::Internal::ETCComputer::ResolveTHFakeBT709Rounding(MUInt15 quantized[3], const MUInt15 targets[3], const MUInt15 &granularity)
+{
+    MFloat lowOctantRGBFloat[3];
+    MFloat highOctantRGBFloat[3];
+
+    for (int ch = 0; ch < 3; ch++)
+    {
+        MUInt15 unquantized = (quantized[ch] << 4) | quantized[ch];
+        MUInt15 unquantizedNext = ParallelMath::Min(ParallelMath::MakeUInt15(255), unquantized + ParallelMath::MakeUInt15(17));
+
+        lowOctantRGBFloat[ch] = ParallelMath::ToFloat(ParallelMath::CompactMultiply(unquantized, granularity) << 1);
+        highOctantRGBFloat[ch] = ParallelMath::ToFloat(ParallelMath::CompactMultiply(unquantizedNext, granularity) << 1);
+    }
+
+    MFloat bestError = ParallelMath::MakeFloat(FLT_MAX);
+    MUInt15 bestOctant = ParallelMath::MakeUInt15(0);
+
+    MFloat cumulativeYUV[3];
+    ConvertToFakeBT709(cumulativeYUV, ParallelMath::ToFloat(targets[0]), ParallelMath::ToFloat(targets[1]), ParallelMath::ToFloat(targets[2]));
+
+    for (uint16_t octant = 0; octant < 8; octant++)
+    {
+        const MFloat &r = (octant & 1) ? highOctantRGBFloat[0] : lowOctantRGBFloat[0];
+        const MFloat &g = (octant & 2) ? highOctantRGBFloat[1] : lowOctantRGBFloat[1];
+        const MFloat &b = (octant & 4) ? highOctantRGBFloat[2] : lowOctantRGBFloat[2];
+
+        MFloat octantYUV[3];
+        ConvertToFakeBT709(octantYUV, r, g, b);
+
+        MFloat delta[3];
+        for (int ch = 0; ch < 3; ch++)
+            delta[ch] = octantYUV[ch] - cumulativeYUV[ch];
+
+        MFloat error = delta[0] * delta[0] + delta[1] + delta[1] + delta[2] * delta[2];
+        ParallelMath::Int16CompFlag errorBetter = ParallelMath::FloatFlagToInt16(ParallelMath::Less(error, bestError));
+        ParallelMath::ConditionalSet(bestOctant, errorBetter, ParallelMath::MakeUInt15(octant));
+        bestError = ParallelMath::Min(error, bestError);
+    }
+
+    for (int ch = 0; ch < 3; ch++)
+        quantized[ch] = quantized[ch] + (ParallelMath::RightShift(bestOctant, ch) & ParallelMath::MakeUInt15(1));
+}
+
+void cvtt::Internal::ETCComputer::ConvertToFakeBT709(MFloat yuv[3], const MUInt15 color[3])
+{
+    MFloat floatRGB[3];
+    for (int ch = 0; ch < 3; ch++)
+        floatRGB[ch] = ParallelMath::ToFloat(color[ch]);
+
+    ConvertToFakeBT709(yuv, floatRGB);
+}
+
+void cvtt::Internal::ETCComputer::ConvertToFakeBT709(MFloat yuv[3], const MFloat color[3])
+{
+    ConvertToFakeBT709(yuv, color[0], color[1], color[2]);
+}
+
+void cvtt::Internal::ETCComputer::ConvertToFakeBT709(MFloat yuv[3], const MFloat &pr, const MFloat &pg, const MFloat &pb)
+{
+    MFloat r = pr;
+    MFloat g = pg;
+    MFloat b = pb;
+
+    yuv[0] = r * 0.368233989135369f + g * 1.23876274963149f + b * 0.125054068802017f;
+    yuv[1] = r * 0.5f - g * 0.4541529f - b * 0.04584709f;
+    yuv[2] = r * -0.081014709086133f - g * 0.272538676238785f + b * 0.353553390593274f;
+}
+
+void cvtt::Internal::ETCComputer::ConvertFromFakeBT709(MFloat rgb[3], const MFloat yuv[3])
+{
+    MFloat yy = yuv[0] * 0.57735026466774571071f;
+    MFloat u = yuv[1];
+    MFloat v = yuv[2];
+
+    rgb[0] = yy + u * 1.5748000207960953486f;
+    rgb[1] = yy - u * 0.46812425854364753669f - v * 0.26491652528157560861f;
+    rgb[2] = yy + v * 2.6242146882856944069f;
 }
 
 void cvtt::Internal::ETCComputer::CompressETC1BlockInternal(MFloat &bestTotalError, uint8_t *outputBuffer, const MUInt15 pixels[16][3], const MFloat preWeightedPixels[16][3], DifferentialResolveStorage &drs, const Options &options)
@@ -1180,6 +1484,8 @@ void cvtt::Internal::ETCComputer::CompressETC1BlockInternal(MFloat &bestTotalErr
 		{ ParallelMath::MakeSInt16(-183), ParallelMath::MakeSInt16(-47), ParallelMath::MakeSInt16(47), ParallelMath::MakeSInt16(183) },
 	};
 
+    bool isFakeBT709 = ((options.flags & cvtt::Flags::ETC_UseFakeBT709) != 0);
+
 	for (int flip = 0; flip < 2; flip++)
 	{
 		drs.diffNumAttempts[0] = drs.diffNumAttempts[1] = zeroU15;
@@ -1202,42 +1508,83 @@ void cvtt::Internal::ETCComputer::CompressETC1BlockInternal(MFloat &bestTotalErr
 					MUInt15 possibleColors[cvtt::Tables::ETC1::g_maxPotentialOffsets];
 
                     MUInt15 quantized[3];
-                    MUInt15 unquantized[3];
-					for (int oi = 0; oi < numOffsets; oi++)
-					{
-						for (int ch = 0; ch < 3; ch++)
-						{
-                            // cu is in range 0..2040
-                            MUInt15 cu15 = ParallelMath::Min(
-                                ParallelMath::MakeUInt15(2040),
-                                ParallelMath::ToUInt15(
-                                    ParallelMath::Max(
-                                        ParallelMath::MakeSInt16(0),
-                                        ParallelMath::LosslessCast<MSInt16>::Cast(sectorCumulative[flip][sector][ch]) + ParallelMath::MakeSInt16(potentialOffsets[oi])
+                    for (int oi = 0; oi < numOffsets; oi++)
+                    {
+                        if (!isFakeBT709)
+                        {
+						    for (int ch = 0; ch < 3; ch++)
+						    {
+                                // cu is in range 0..2040
+                                MUInt15 cu15 = ParallelMath::Min(
+                                    ParallelMath::MakeUInt15(2040),
+                                    ParallelMath::ToUInt15(
+                                        ParallelMath::Max(
+                                            ParallelMath::MakeSInt16(0),
+                                            ParallelMath::LosslessCast<MSInt16>::Cast(sectorCumulative[flip][sector][ch]) + ParallelMath::MakeSInt16(potentialOffsets[oi])
+                                        )
                                     )
-                                )
-                            );
-                            MUInt15 q;
-
-                            if (d == 1)
-                            {
-                                //quantized[ch] = (cu * 31 + (cu >> 3) + 1024) >> 11;
-                                quantized[ch] = ParallelMath::ToUInt15(
-                                    ParallelMath::RightShift(
-                                        (ParallelMath::LosslessCast<MUInt16>::Cast(cu15) << 5) - ParallelMath::LosslessCast<MUInt16>::Cast(cu15) + ParallelMath::LosslessCast<MUInt16>::Cast(ParallelMath::RightShift(cu15, 3)) + ParallelMath::MakeUInt16(1024)
-                                        , 11)
-                                    );
-                            }
-                            else
-                            {
-                                //quantized[ch] = (cu * 30 + (cu >> 3) + 2048) >> 12;
-                                quantized[ch] = ParallelMath::ToUInt15(
-                                    ParallelMath::RightShift(
-                                    (ParallelMath::LosslessCast<MUInt16>::Cast(cu15) << 5) - ParallelMath::LosslessCast<MUInt16>::Cast(cu15 << 1) + ParallelMath::LosslessCast<MUInt16>::Cast(ParallelMath::RightShift(cu15, 3)) + ParallelMath::MakeUInt16(2048)
-                                        , 12)
                                 );
-                            }
-						}
+
+                                if (d == 1)
+                                {
+                                    //quantized[ch] = (cu * 31 + (cu >> 3) + 1024) >> 11;
+                                    quantized[ch] = ParallelMath::ToUInt15(
+                                        ParallelMath::RightShift(
+                                            (ParallelMath::LosslessCast<MUInt16>::Cast(cu15) << 5) - ParallelMath::LosslessCast<MUInt16>::Cast(cu15) + ParallelMath::LosslessCast<MUInt16>::Cast(ParallelMath::RightShift(cu15, 3)) + ParallelMath::MakeUInt16(1024)
+                                            , 11)
+                                        );
+                                }
+                                else
+                                {
+                                    //quantized[ch] = (cu * 30 + (cu >> 3) + 2048) >> 12;
+                                    quantized[ch] = ParallelMath::ToUInt15(
+                                        ParallelMath::RightShift(
+                                        (ParallelMath::LosslessCast<MUInt16>::Cast(cu15) << 5) - ParallelMath::LosslessCast<MUInt16>::Cast(cu15 << 1) + ParallelMath::LosslessCast<MUInt16>::Cast(ParallelMath::RightShift(cu15, 3)) + ParallelMath::MakeUInt16(2048)
+                                            , 12)
+                                    );
+                                }
+						    }
+                        }
+                        else
+                        {
+                            MUInt15 offsetCumulative[3];
+						    for (int ch = 0; ch < 3; ch++)
+						    {
+                                // cu is in range 0..2040
+                                MUInt15 cu15 = ParallelMath::Min(
+                                    ParallelMath::MakeUInt15(2040),
+                                    ParallelMath::ToUInt15(
+                                        ParallelMath::Max(
+                                            ParallelMath::MakeSInt16(0),
+                                            ParallelMath::LosslessCast<MSInt16>::Cast(sectorCumulative[flip][sector][ch]) + ParallelMath::MakeSInt16(potentialOffsets[oi])
+                                        )
+                                    )
+                                );
+
+                                if (d == 1)
+                                {
+                                    //quantized[ch] = (cu * 31 + (cu >> 3)) >> 11;
+                                    quantized[ch] = ParallelMath::ToUInt15(
+                                        ParallelMath::RightShift(
+                                            (ParallelMath::LosslessCast<MUInt16>::Cast(cu15) << 5) - ParallelMath::LosslessCast<MUInt16>::Cast(cu15) + ParallelMath::LosslessCast<MUInt16>::Cast(ParallelMath::RightShift(cu15, 3))
+                                            , 11)
+                                        );
+                                }
+                                else
+                                {
+                                    //quantized[ch] = (cu * 30 + (cu >> 3)) >> 12;
+                                    quantized[ch] = ParallelMath::ToUInt15(
+                                        ParallelMath::RightShift(
+                                        (ParallelMath::LosslessCast<MUInt16>::Cast(cu15) << 5) - ParallelMath::LosslessCast<MUInt16>::Cast(cu15 << 1) + ParallelMath::LosslessCast<MUInt16>::Cast(ParallelMath::RightShift(cu15, 3))
+                                            , 12)
+                                    );
+                                }
+
+                                offsetCumulative[ch] = cu15;
+						    }
+
+                            ResolveHalfBlockFakeBT709Rounding(quantized, offsetCumulative, d == 1);
+                        }
 
 						possibleColors[oi] = quantized[0] | (quantized[1] << 5) | (quantized[2] << 10);
 					}

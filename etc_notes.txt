@@ -22,3 +22,6 @@ There are several scenarios where this is not ideal:
 T and H mode just work by generating clustering assignments by computing a chrominance line and splitting the block in half by the chrominance midpoint and using those to determine the averages.
 
 Planar mode is just solved algebraically.
+
+If you want to emulate etc2comp's default settings, add the flag ETC_UseFakeBT709 to use its modified Rec. 709 error coefficients.
+Doing that will significantly slow down encoding because it requires much more complicated quantization math.

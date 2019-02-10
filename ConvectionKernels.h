@@ -61,6 +61,9 @@ namespace cvtt
         // Uniform color channel importance
         const uint32_t Uniform                  = 0x200;
 
+        // Use fake BT.709 color space for etc2comp compatibility
+        const uint32_t ETC_UseFakeBT709         = 0x400;
+
         // Misc useful default flag combinations
         const uint32_t Fastest = (BC6H_FastIndexing | S3TC_Paranoid);
         const uint32_t Faster = (BC7_EnableDualPlane | BC6H_FastIndexing | S3TC_Paranoid);
