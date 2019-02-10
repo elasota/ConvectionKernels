@@ -208,7 +208,7 @@ namespace cvtt
 
             for (size_t blockBase = 0; blockBase < cvtt::NumParallelBlocks; blockBase += ParallelMath::ParallelSize)
             {
-                Internal::ETCComputer::CompressETC1Block(pBC, pBlocks + blockBase, compressionData);
+                Internal::ETCComputer::CompressETC1Block(pBC, pBlocks + blockBase, compressionData, options);
                 pBC += ParallelMath::ParallelSize * 8;
             }
         }
@@ -223,7 +223,7 @@ namespace cvtt
 
             for (size_t blockBase = 0; blockBase < cvtt::NumParallelBlocks; blockBase += ParallelMath::ParallelSize)
             {
-                Internal::ETCComputer::CompressETC2Block(pBC, pBlocks + blockBase, compressionData);
+                Internal::ETCComputer::CompressETC2Block(pBC, pBlocks + blockBase, compressionData, options);
                 pBC += ParallelMath::ParallelSize * 8;
             }
         }

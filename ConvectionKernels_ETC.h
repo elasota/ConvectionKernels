@@ -12,8 +12,8 @@ namespace cvtt
         class ETCComputer
         {
         public:
-            static void CompressETC1Block(uint8_t *outputBuffer, const PixelBlockU8 *inputBlocks, ETC1CompressionData *compressionData);
-            static void CompressETC2Block(uint8_t *outputBuffer, const PixelBlockU8 *pixelBlocks, ETC2CompressionData *compressionData);
+            static void CompressETC1Block(uint8_t *outputBuffer, const PixelBlockU8 *inputBlocks, ETC1CompressionData *compressionData, const Options &options);
+            static void CompressETC2Block(uint8_t *outputBuffer, const PixelBlockU8 *inputBlocks, ETC2CompressionData *compressionData, const Options &options);
 
             static ETC2CompressionData *AllocETC2Data(cvtt::Kernels::allocFunc_t allocFunc, void *context);
             static void ReleaseETC2Data(ETC2CompressionData *compressionData, cvtt::Kernels::freeFunc_t freeFunc);
@@ -73,19 +73,21 @@ namespace cvtt
                 void *m_context;
             };
 
-            static MFloat ComputeError(const MUInt15 pixelA[3], const MUInt15 pixelB[3]);
-            static void TestHalfBlock(MFloat &outError, MUInt16 &outSelectors, MUInt15 quantizedPackedColor, const MUInt15 pixels[8][3], const MSInt16 modifiers[4], bool isDifferential);
+            static MFloat ComputeErrorUniform(const MUInt15 pixelA[3], const MUInt15 pixelB[3]);
+            static MFloat ComputeErrorWeighted(const MUInt15 reconstructed[3], const MFloat pixelB[3], const Options options);
+            static void TestHalfBlock(MFloat &outError, MUInt16 &outSelectors, MUInt15 quantizedPackedColor, const MUInt15 pixels[8][3], const MFloat preWeightedPixels[8][3], const MSInt16 modifiers[4], bool isDifferential, const Options &options);
 
             static ParallelMath::Int16CompFlag ETCDifferentialIsLegalForChannel(const MUInt15 &a, const MUInt15 &b);
             static ParallelMath::Int16CompFlag ETCDifferentialIsLegal(const MUInt15 &a, const MUInt15 &b);
             static bool ETCDifferentialIsLegalForChannelScalar(const uint16_t &a, const uint16_t &b);
             static bool ETCDifferentialIsLegalScalar(const uint16_t &a, const uint16_t &b);
-            static void EncodeTMode(uint8_t *outputBuffer, MFloat &bestError, const ParallelMath::Int16CompFlag isIsolated[16], const MUInt15 pixels[16][3]);
-            static void EncodeHMode(uint8_t *outputBuffer, MFloat &bestError, const ParallelMath::Int16CompFlag groupings[16], const MUInt15 pixels[16][3], HModeEval &he);
+            static void EncodeTMode(uint8_t *outputBuffer, MFloat &bestError, const ParallelMath::Int16CompFlag isIsolated[16], const MUInt15 pixels[16][3], const MFloat preWeightedPixels[16][3], const Options &options);
+            static void EncodeHMode(uint8_t *outputBuffer, MFloat &bestError, const ParallelMath::Int16CompFlag groupings[16], const MUInt15 pixels[16][3], HModeEval &he, const MFloat preWeightedPixels[16][3], const Options &options);
             static MUInt15 DecodePlanarCoeff(const MUInt15 &coeff, int ch);
             static void EncodePlanar(uint8_t *outputBuffer, MFloat &bestError, const MUInt15 pixels[16][3]);
 
-            static void CompressETC1BlockInternal(MFloat &bestTotalError, uint8_t *outputBuffer, const PixelBlockU8 *inputBlocks, DifferentialResolveStorage& compressionData);
+            static void CompressETC1BlockInternal(MFloat &bestTotalError, uint8_t *outputBuffer, const MUInt15 pixels[16][3], const MFloat preWeightedPixels[16][3], DifferentialResolveStorage& compressionData, const Options &options);
+            static void ExtractBlocks(MUInt15 pixels[16][3], MFloat preWeightedPixels[16][3], const PixelBlockU8 *inputBlocks, const Options &options);
         };
     }
 }

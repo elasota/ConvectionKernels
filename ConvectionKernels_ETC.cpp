@@ -40,10 +40,12 @@ http://go.microsoft.com/fwlink/?LinkId=248926
 #include "ConvectionKernels_ETC2.h"
 #include "ConvectionKernels_ParallelMath.h"
 
-cvtt::ParallelMath::Float cvtt::Internal::ETCComputer::ComputeError(const MUInt15 pixelA[3], const MUInt15 pixelB[3])
+cvtt::ParallelMath::Float cvtt::Internal::ETCComputer::ComputeErrorUniform(const MUInt15 pixelA[3], const MUInt15 pixelB[3])
 {
-    MFloat error = ParallelMath::MakeFloatZero();
-    for (int ch = 0; ch < 3; ch++)
+    MSInt16 d0 = ParallelMath::LosslessCast<MSInt16>::Cast(pixelA[0]) - ParallelMath::LosslessCast<MSInt16>::Cast(pixelB[0]);
+    MFloat fd0 = ParallelMath::ToFloat(d0);
+    MFloat error = fd0 * fd0;
+    for (int ch = 1; ch < 3; ch++)
     {
         MSInt16 d = ParallelMath::LosslessCast<MSInt16>::Cast(pixelA[ch]) - ParallelMath::LosslessCast<MSInt16>::Cast(pixelB[ch]);
         MFloat fd = ParallelMath::ToFloat(d);
@@ -52,7 +54,16 @@ cvtt::ParallelMath::Float cvtt::Internal::ETCComputer::ComputeError(const MUInt1
     return error;
 }
 
-void cvtt::Internal::ETCComputer::TestHalfBlock(MFloat &outError, MUInt16 &outSelectors, MUInt15 quantizedPackedColor, const MUInt15 pixels[8][3], const MSInt16 modifiers[4], bool isDifferential)
+cvtt::ParallelMath::Float cvtt::Internal::ETCComputer::ComputeErrorWeighted(const MUInt15 reconstructed[3], const MFloat preWeightedPixel[3], const Options options)
+{
+    MFloat dr = ParallelMath::ToFloat(reconstructed[0]) * options.redWeight - preWeightedPixel[0];
+    MFloat dg = ParallelMath::ToFloat(reconstructed[1]) * options.greenWeight - preWeightedPixel[1];
+    MFloat db = ParallelMath::ToFloat(reconstructed[2]) * options.blueWeight - preWeightedPixel[2];
+
+    return dr * dr + dg * dg + db * db;
+}
+
+void cvtt::Internal::ETCComputer::TestHalfBlock(MFloat &outError, MUInt16 &outSelectors, MUInt15 quantizedPackedColor, const MUInt15 pixels[8][3], const MFloat preWeightedPixels[8][3], const MSInt16 modifiers[4], bool isDifferential, const Options &options)
 {
     MUInt15 quantized[3];
     MUInt15 unquantized[3];
@@ -78,6 +89,8 @@ void cvtt::Internal::ETCComputer::TestHalfBlock(MFloat &outError, MUInt16 &outSe
         for (int ch = 0; ch < 3; ch++)
             unquantizedModified[s][ch] = ParallelMath::Min(ParallelMath::ToUInt15(ParallelMath::Max(ParallelMath::ToSInt16(unquantized[ch]) + modifiers[s], s16_zero)), u15_255);
 
+    bool isUniform = ((options.flags & cvtt::Flags::Uniform) != 0);
+
     for (int px = 0; px < 8; px++)
     {
         MFloat bestError = ParallelMath::MakeFloat(FLT_MAX);
@@ -85,13 +98,10 @@ void cvtt::Internal::ETCComputer::TestHalfBlock(MFloat &outError, MUInt16 &outSe
 
         for (unsigned int s = 0; s < 4; s++)
         {
-            for (int ch = 0; ch < 3; ch++)
-            {
-                MFloat error = ComputeError(pixels[px], unquantizedModified[s]);
-                ParallelMath::FloatCompFlag errorBetter = ParallelMath::Less(error, bestError);
-                bestSelector = ParallelMath::Select(ParallelMath::FloatFlagToInt16(errorBetter), ParallelMath::MakeUInt16(s), bestSelector);
-                bestError = ParallelMath::Min(error, bestError);
-            }
+            MFloat error = isUniform ? ComputeErrorUniform(pixels[px], unquantizedModified[s]) : ComputeErrorWeighted(unquantizedModified[s], preWeightedPixels[px], options);
+            ParallelMath::FloatCompFlag errorBetter = ParallelMath::Less(error, bestError);
+            bestSelector = ParallelMath::Select(ParallelMath::FloatFlagToInt16(errorBetter), ParallelMath::MakeUInt16(s), bestSelector);
+            bestError = ParallelMath::Min(error, bestError);
         }
 
         totalError = totalError + bestError;
@@ -134,7 +144,7 @@ bool cvtt::Internal::ETCComputer::ETCDifferentialIsLegalScalar(const uint16_t &a
         & ETCDifferentialIsLegalForChannelScalar(a & 31, b & 31);
 }
 
-void cvtt::Internal::ETCComputer::EncodeTMode(uint8_t *outputBuffer, MFloat &bestError, const ParallelMath::Int16CompFlag isIsolated[16], const MUInt15 pixels[16][3])
+void cvtt::Internal::ETCComputer::EncodeTMode(uint8_t *outputBuffer, MFloat &bestError, const ParallelMath::Int16CompFlag isIsolated[16], const MUInt15 pixels[16][3], const MFloat preWeightedPixels[16][3], const Options &options)
 {
     ParallelMath::Int16CompFlag bestIsThisMode = ParallelMath::MakeBoolInt16(false);
 
@@ -186,9 +196,11 @@ void cvtt::Internal::ETCComputer::EncodeTMode(uint8_t *outputBuffer, MFloat &bes
     for (int ch = 0; ch < 3; ch++)
         isolatedColor[ch] = (isolatedAverageQuantized[ch]) | (isolatedAverageQuantized[ch] << 4);
 
+    bool isUniform = ((options.flags & cvtt::Flags::Uniform) != 0);
+
     MFloat isolatedError[16];
     for (int px = 0; px < 16; px++)
-        isolatedError[px] = ComputeError(pixels[px], isolatedColor);
+        isolatedError[px] = isUniform ? ComputeErrorUniform(pixels[px], isolatedColor) : ComputeErrorWeighted(isolatedColor, preWeightedPixels[px], options);
 
     MSInt32 bestSelectors = ParallelMath::MakeSInt32(0);
     MUInt15 bestTable = ParallelMath::MakeUInt15(0);
@@ -295,7 +307,7 @@ void cvtt::Internal::ETCComputer::EncodeTMode(uint8_t *outputBuffer, MFloat &bes
                 MUInt15 pixelBestSelector = ParallelMath::MakeUInt15(0);
                 for (int i = 0; i < 3; i++)
                 {
-                    MFloat error = ComputeError(lineColors[i], pixels[px]);
+                    MFloat error = isUniform ? ComputeErrorUniform(lineColors[i], pixels[px]) : ComputeErrorWeighted(lineColors[i], preWeightedPixels[px], options);
                     ParallelMath::FloatCompFlag errorBetter = ParallelMath::Less(error, pixelError);
                     pixelError = ParallelMath::Min(error, pixelError);
                     pixelBestSelector = ParallelMath::Select(ParallelMath::FloatFlagToInt16(errorBetter), ParallelMath::MakeUInt15(i + 1), pixelBestSelector);
@@ -382,7 +394,7 @@ void cvtt::Internal::ETCComputer::EncodeTMode(uint8_t *outputBuffer, MFloat &bes
     }
 }
 
-void cvtt::Internal::ETCComputer::EncodeHMode(uint8_t *outputBuffer, MFloat &bestError, const ParallelMath::Int16CompFlag groupings[16], const MUInt15 pixels[16][3], HModeEval &he)
+void cvtt::Internal::ETCComputer::EncodeHMode(uint8_t *outputBuffer, MFloat &bestError, const ParallelMath::Int16CompFlag groupings[16], const MUInt15 pixels[16][3], HModeEval &he, const MFloat preWeightedPixels[16][3], const Options &options)
 {
     MUInt15 zero15 = ParallelMath::MakeUInt15(0);
 
@@ -414,6 +426,8 @@ void cvtt::Internal::ETCComputer::EncodeHMode(uint8_t *outputBuffer, MFloat &bes
     MUInt16 bestSignBits = ParallelMath::MakeUInt16(0);
     MUInt15 bestColors[2] = { zero15, zero15 };
     MUInt15 bestTable = ParallelMath::MakeUInt15(0);
+
+    bool isUniform = ((options.flags & cvtt::Flags::Uniform) != 0);
 
     for (int table = 0; table < 8; table++)
     {
@@ -502,7 +516,7 @@ void cvtt::Internal::ETCComputer::EncodeHMode(uint8_t *outputBuffer, MFloat &bes
             {
                 MFloat errors[2];
                 for (int i = 0; i < 2; i++)
-                    errors[i] = ComputeError(colors[i], pixels[px]);
+                    errors[i] = isUniform ? ComputeErrorUniform(colors[i], pixels[px]) : ComputeErrorWeighted(colors[i], preWeightedPixels[px], options);
 
                 ParallelMath::Int16CompFlag errorOneLess = ParallelMath::FloatFlagToInt16(ParallelMath::Less(errors[1], errors[0]));
                 he.errors[ci][px] = ParallelMath::Min(errors[0], errors[1]);
@@ -995,17 +1009,15 @@ void cvtt::Internal::ETCComputer::EncodePlanar(uint8_t *outputBuffer, MFloat &be
     }
 }
 
-void cvtt::Internal::ETCComputer::CompressETC2Block(uint8_t *outputBuffer, const PixelBlockU8 *pixelBlocks, ETC2CompressionData *compressionData)
+void cvtt::Internal::ETCComputer::CompressETC2Block(uint8_t *outputBuffer, const PixelBlockU8 *pixelBlocks, ETC2CompressionData *compressionData, const Options &options)
 {
     MFloat bestError = ParallelMath::MakeFloat(FLT_MAX);
 
     ETC2CompressionDataInternal* internalData = static_cast<ETC2CompressionDataInternal*>(compressionData);
 
     MUInt15 pixels[16][3];
-    for (int px = 0; px < 16; px++)
-        for (int ch = 0; ch < 3; ch++)
-            for (int block = 0; block < ParallelMath::ParallelSize; block++)
-                ParallelMath::PutUInt15(pixels[px][ch], block, pixelBlocks[block].m_pixels[px][ch]);
+    MFloat preWeightedPixels[16][3];
+    ExtractBlocks(pixels, preWeightedPixels, pixelBlocks, options);
 
     EncodePlanar(outputBuffer, bestError, pixels);
 
@@ -1064,35 +1076,49 @@ void cvtt::Internal::ETCComputer::CompressETC2Block(uint8_t *outputBuffer, const
     for (int px = 0; px < 16; px++)
         sectorAssignments[px] = ParallelMath::FloatFlagToInt16(ParallelMath::Less(ParallelMath::ToFloat(chromaDelta[px][0]) * dx + ParallelMath::ToFloat(chromaDelta[px][1]) * dy * rcpSqrt3, ParallelMath::MakeFloatZero()));
 
-    EncodeTMode(outputBuffer, bestError, sectorAssignments, pixels);
+    EncodeTMode(outputBuffer, bestError, sectorAssignments, pixels, preWeightedPixels, options);
 
     // Flip sector assignments
     for (int px = 0; px < 16; px++)
         sectorAssignments[px] = ~sectorAssignments[px];
 
-    EncodeTMode(outputBuffer, bestError, sectorAssignments, pixels);
+    EncodeTMode(outputBuffer, bestError, sectorAssignments, pixels, preWeightedPixels, options);
 
-    EncodeHMode(outputBuffer, bestError, sectorAssignments, pixels, internalData->m_h);
+    EncodeHMode(outputBuffer, bestError, sectorAssignments, pixels, internalData->m_h, preWeightedPixels, options);
 
-    CompressETC1BlockInternal(bestError, outputBuffer, pixelBlocks, internalData->m_drs);
+    CompressETC1BlockInternal(bestError, outputBuffer, pixels, preWeightedPixels, internalData->m_drs, options);
 }
 
-void cvtt::Internal::ETCComputer::CompressETC1Block(uint8_t *outputBuffer, const PixelBlockU8 *inputBlocks, ETC1CompressionData *compressionData)
+void cvtt::Internal::ETCComputer::CompressETC1Block(uint8_t *outputBuffer, const PixelBlockU8 *inputBlocks, ETC1CompressionData *compressionData, const Options &options)
 {
     DifferentialResolveStorage &drs = static_cast<ETC1CompressionDataInternal*>(compressionData)->m_drs;
     MFloat bestTotalError = ParallelMath::MakeFloat(FLT_MAX);
 
-    CompressETC1BlockInternal(bestTotalError, outputBuffer, inputBlocks, drs);
+    MUInt15 pixels[16][3];
+    MFloat preWeightedPixels[16][3];
+    ExtractBlocks(pixels, preWeightedPixels, inputBlocks, options);
+
+    CompressETC1BlockInternal(bestTotalError, outputBuffer, pixels, preWeightedPixels, drs, options);
 }
 
-void cvtt::Internal::ETCComputer::CompressETC1BlockInternal(MFloat &bestTotalError, uint8_t *outputBuffer, const PixelBlockU8 *inputBlocks, DifferentialResolveStorage &drs)
+void cvtt::Internal::ETCComputer::ExtractBlocks(MUInt15 pixels[16][3], MFloat preWeightedPixels[16][3], const PixelBlockU8 *inputBlocks, const Options &options)
 {
-	MUInt15 pixels[16][3];
-	for (int px = 0; px < 16; px++)
-		for (int ch = 0; ch < 3; ch++)
+    for (int px = 0; px < 16; px++)
+    {
+        for (int ch = 0; ch < 3; ch++)
+        {
             for (int block = 0; block < ParallelMath::ParallelSize; block++)
-    			ParallelMath::PutUInt15(pixels[px][ch], block, inputBlocks[block].m_pixels[px][ch]);
+                ParallelMath::PutUInt15(pixels[px][ch], block, inputBlocks[block].m_pixels[px][ch]);
+        }
 
+        preWeightedPixels[px][0] = ParallelMath::ToFloat(pixels[px][0]) * options.redWeight;
+        preWeightedPixels[px][1] = ParallelMath::ToFloat(pixels[px][1]) * options.greenWeight;
+        preWeightedPixels[px][2] = ParallelMath::ToFloat(pixels[px][2]) * options.blueWeight;
+    }
+}
+
+void cvtt::Internal::ETCComputer::CompressETC1BlockInternal(MFloat &bestTotalError, uint8_t *outputBuffer, const MUInt15 pixels[16][3], const MFloat preWeightedPixels[16][3], DifferentialResolveStorage &drs, const Options &options)
+{
 	const int flipTables[2][2][8] =
 	{
 		{
@@ -1117,6 +1143,7 @@ void cvtt::Internal::ETCComputer::CompressETC1BlockInternal(MFloat &bestTotalErr
     MUInt15 bestD = zeroU15;
 
     MUInt15 sectorPixels[2][2][8][3];
+    MFloat sectorPreWeightedPixels[2][2][8][3];
     MUInt15 sectorCumulative[2][2][3];
 
     ParallelMath::Int16CompFlag bestIsThisMode = ParallelMath::MakeBoolInt16(false);
@@ -1134,6 +1161,7 @@ void cvtt::Internal::ETCComputer::CompressETC1BlockInternal(MFloat &bestTotalErr
 				{
 					MUInt15 pixelChannelValue = pixels[flipTables[flip][sector][px]][ch];
 					sectorPixels[flip][sector][px][ch] = pixelChannelValue;
+                    sectorPreWeightedPixels[flip][sector][px][ch] = preWeightedPixels[flipTables[flip][sector][px]][ch];
 					sectorCumulative[flip][sector][ch] = sectorCumulative[flip][sector][ch] + pixelChannelValue;
 				}
 			}
@@ -1246,7 +1274,7 @@ void cvtt::Internal::ETCComputer::CompressETC1BlockInternal(MFloat &bestTotalErr
 						MFloat error = ParallelMath::MakeFloatZero();
 						MUInt16 selectors = ParallelMath::MakeUInt16(0);
                         MUInt15 quantized = possibleColors[i];
-						TestHalfBlock(error, selectors, quantized, sectorPixels[flip][sector], modifierTables[table], d == 1);
+						TestHalfBlock(error, selectors, quantized, sectorPixels[flip][sector], sectorPreWeightedPixels[flip][sector], modifierTables[table], d == 1, options);
 
 						if (d == 0)
 						{
