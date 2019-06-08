@@ -9,6 +9,9 @@ namespace cvtt
 {
     namespace Internal
     {
+        ParallelMath::SInt16 UnscaleHDRValueSigned(const ParallelMath::SInt16 &v);
+        ParallelMath::UInt15 UnscaleHDRValueUnsigned(const ParallelMath::UInt16 &v);
+
         template<int TVectorSize>
         class IndexSelectorHDR : public IndexSelector<TVectorSize>
         {
