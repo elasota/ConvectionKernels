@@ -632,10 +632,10 @@ void cvtt::Internal::S3TCComputer::PackExplicitAlpha(uint32_t flags, const Pixel
 
     for (int block = 0; block < ParallelMath::ParallelSize; block++)
     {
-        for (int px = 0; px < 16; px += 8)
+        for (int px = 0; px < 16; px += 2)
         {
             int index0 = ParallelMath::Extract(indexes[px], block);
-            int index1 = ParallelMath::Extract(indexes[px], block);
+            int index1 = ParallelMath::Extract(indexes[px + 1], block);
 
             packedBlocks[px / 2] = static_cast<uint8_t>(index0 | (index1 << 4));
         }
