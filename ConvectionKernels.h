@@ -25,6 +25,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #ifndef __CVTT_CONVECTION_KERNELS__
 #define __CVTT_CONVECTION_KERNELS__
 
+#include <stddef.h>
 #include <stdint.h>
 
 namespace cvtt
