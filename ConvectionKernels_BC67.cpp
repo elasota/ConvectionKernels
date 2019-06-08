@@ -1607,99 +1607,106 @@ void cvtt::Internal::BC7Computer::TrySinglePlane(uint32_t flags, const MUInt15 p
                 const cvtt::Tables::BC7SC::Table **scTables = NULL;
                 int numSCTables = 0;
 
+                const cvtt::Tables::BC7SC::Table *tables0[] =
+                {
+                    &cvtt::Tables::BC7SC::g_mode0_p00_i1,
+                    &cvtt::Tables::BC7SC::g_mode0_p00_i2,
+                    &cvtt::Tables::BC7SC::g_mode0_p00_i3,
+                    &cvtt::Tables::BC7SC::g_mode0_p01_i1,
+                    &cvtt::Tables::BC7SC::g_mode0_p01_i2,
+                    &cvtt::Tables::BC7SC::g_mode0_p01_i3,
+                    &cvtt::Tables::BC7SC::g_mode0_p10_i1,
+                    &cvtt::Tables::BC7SC::g_mode0_p10_i2,
+                    &cvtt::Tables::BC7SC::g_mode0_p10_i3,
+                    &cvtt::Tables::BC7SC::g_mode0_p11_i1,
+                    &cvtt::Tables::BC7SC::g_mode0_p11_i2,
+                    &cvtt::Tables::BC7SC::g_mode0_p11_i3,
+                };
+
+                const cvtt::Tables::BC7SC::Table *tables1[] =
+                {
+                    &cvtt::Tables::BC7SC::g_mode1_p0_i1,
+                    &cvtt::Tables::BC7SC::g_mode1_p0_i2,
+                    &cvtt::Tables::BC7SC::g_mode1_p0_i3,
+                    &cvtt::Tables::BC7SC::g_mode1_p1_i1,
+                    &cvtt::Tables::BC7SC::g_mode1_p1_i2,
+                    &cvtt::Tables::BC7SC::g_mode1_p1_i3,
+                };
+
+                const cvtt::Tables::BC7SC::Table *tables2[] =
+                {
+                    &cvtt::Tables::BC7SC::g_mode2,
+                };
+
+                const cvtt::Tables::BC7SC::Table *tables3[] =
+                {
+                    &cvtt::Tables::BC7SC::g_mode3_p0,
+                    &cvtt::Tables::BC7SC::g_mode3_p1,
+                };
+
+                const cvtt::Tables::BC7SC::Table *tables6[] =
+                {
+                    &cvtt::Tables::BC7SC::g_mode6_p0_i1,
+                    &cvtt::Tables::BC7SC::g_mode6_p0_i2,
+                    &cvtt::Tables::BC7SC::g_mode6_p0_i3,
+                    &cvtt::Tables::BC7SC::g_mode6_p0_i4,
+                    &cvtt::Tables::BC7SC::g_mode6_p0_i5,
+                    &cvtt::Tables::BC7SC::g_mode6_p0_i6,
+                    &cvtt::Tables::BC7SC::g_mode6_p0_i7,
+                    &cvtt::Tables::BC7SC::g_mode6_p1_i1,
+                    &cvtt::Tables::BC7SC::g_mode6_p1_i2,
+                    &cvtt::Tables::BC7SC::g_mode6_p1_i3,
+                    &cvtt::Tables::BC7SC::g_mode6_p1_i4,
+                    &cvtt::Tables::BC7SC::g_mode6_p1_i5,
+                    &cvtt::Tables::BC7SC::g_mode6_p1_i6,
+                    &cvtt::Tables::BC7SC::g_mode6_p1_i7,
+                };
+
+                const cvtt::Tables::BC7SC::Table *tables7[] =
+                {
+                    &cvtt::Tables::BC7SC::g_mode7_p00,
+                    &cvtt::Tables::BC7SC::g_mode7_p01,
+                    &cvtt::Tables::BC7SC::g_mode7_p10,
+                    &cvtt::Tables::BC7SC::g_mode7_p11,
+                };
+
                 switch (mode)
                 {
                 case 0:
                 {
-                    const cvtt::Tables::BC7SC::Table *tables[] =
-                    {
-                        &cvtt::Tables::BC7SC::g_mode0_p00_i1,
-                        &cvtt::Tables::BC7SC::g_mode0_p00_i2,
-                        &cvtt::Tables::BC7SC::g_mode0_p00_i3,
-                        &cvtt::Tables::BC7SC::g_mode0_p01_i1,
-                        &cvtt::Tables::BC7SC::g_mode0_p01_i2,
-                        &cvtt::Tables::BC7SC::g_mode0_p01_i3,
-                        &cvtt::Tables::BC7SC::g_mode0_p10_i1,
-                        &cvtt::Tables::BC7SC::g_mode0_p10_i2,
-                        &cvtt::Tables::BC7SC::g_mode0_p10_i3,
-                        &cvtt::Tables::BC7SC::g_mode0_p11_i1,
-                        &cvtt::Tables::BC7SC::g_mode0_p11_i2,
-                        &cvtt::Tables::BC7SC::g_mode0_p11_i3,
-                    };
-                    scTables = tables;
-                    numSCTables = sizeof(tables) / sizeof(tables[0]);
+                    scTables = tables0;
+                    numSCTables = sizeof(tables0) / sizeof(tables0[0]);
                 }
                 break;
                 case 1:
                 {
-                    const cvtt::Tables::BC7SC::Table *tables[] =
-                    {
-                        &cvtt::Tables::BC7SC::g_mode1_p0_i1,
-                        &cvtt::Tables::BC7SC::g_mode1_p0_i2,
-                        &cvtt::Tables::BC7SC::g_mode1_p0_i3,
-                        &cvtt::Tables::BC7SC::g_mode1_p1_i1,
-                        &cvtt::Tables::BC7SC::g_mode1_p1_i2,
-                        &cvtt::Tables::BC7SC::g_mode1_p1_i3,
-                    };
-                    scTables = tables;
-                    numSCTables = sizeof(tables) / sizeof(tables[0]);
+                    scTables = tables1;
+                    numSCTables = sizeof(tables1) / sizeof(tables1[0]);
                 }
                 break;
                 case 2:
                 {
-                    const cvtt::Tables::BC7SC::Table *tables[] =
-                    {
-                        &cvtt::Tables::BC7SC::g_mode2,
-                    };
-                    scTables = tables;
-                    numSCTables = sizeof(tables) / sizeof(tables[0]);
+
+                    scTables = tables2;
+                    numSCTables = sizeof(tables2) / sizeof(tables2[0]);
                 }
                 break;
                 case 3:
                 {
-                    const cvtt::Tables::BC7SC::Table *tables[] =
-                    {
-                        &cvtt::Tables::BC7SC::g_mode3_p0,
-                        &cvtt::Tables::BC7SC::g_mode3_p1,
-                    };
-                    scTables = tables;
-                    numSCTables = sizeof(tables) / sizeof(tables[0]);
+                    scTables = tables3;
+                    numSCTables = sizeof(tables3) / sizeof(tables3[0]);
                 }
                 break;
                 case 6:
                 {
-                    const cvtt::Tables::BC7SC::Table *tables[] =
-                    {
-                        &cvtt::Tables::BC7SC::g_mode6_p0_i1,
-                        &cvtt::Tables::BC7SC::g_mode6_p0_i2,
-                        &cvtt::Tables::BC7SC::g_mode6_p0_i3,
-                        &cvtt::Tables::BC7SC::g_mode6_p0_i4,
-                        &cvtt::Tables::BC7SC::g_mode6_p0_i5,
-                        &cvtt::Tables::BC7SC::g_mode6_p0_i6,
-                        &cvtt::Tables::BC7SC::g_mode6_p0_i7,
-                        &cvtt::Tables::BC7SC::g_mode6_p1_i1,
-                        &cvtt::Tables::BC7SC::g_mode6_p1_i2,
-                        &cvtt::Tables::BC7SC::g_mode6_p1_i3,
-                        &cvtt::Tables::BC7SC::g_mode6_p1_i4,
-                        &cvtt::Tables::BC7SC::g_mode6_p1_i5,
-                        &cvtt::Tables::BC7SC::g_mode6_p1_i6,
-                        &cvtt::Tables::BC7SC::g_mode6_p1_i7,
-                    };
-                    scTables = tables;
-                    numSCTables = sizeof(tables) / sizeof(tables[0]);
+                    scTables = tables6;
+                    numSCTables = sizeof(tables6) / sizeof(tables6[0]);
                 }
                 break;
                 case 7:
                 {
-                    const cvtt::Tables::BC7SC::Table *tables[] =
-                    {
-                        &cvtt::Tables::BC7SC::g_mode7_p00,
-                        &cvtt::Tables::BC7SC::g_mode7_p01,
-                        &cvtt::Tables::BC7SC::g_mode7_p10,
-                        &cvtt::Tables::BC7SC::g_mode7_p11,
-                    };
-                    scTables = tables;
-                    numSCTables = sizeof(tables) / sizeof(tables[0]);
+                    scTables = tables7;
+                    numSCTables = sizeof(tables7) / sizeof(tables7[0]);
                 }
                 break;
                 default:
