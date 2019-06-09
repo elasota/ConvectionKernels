@@ -158,6 +158,7 @@
     <ClInclude Include="ConvectionKernels_PackedCovarianceMatrix.h" />
     <ClInclude Include="ConvectionKernels_ParallelMath.h" />
     <ClInclude Include="ConvectionKernels_S3TC.h" />
+    <ClInclude Include="ConvectionKernels_S3TC_SingleColor.h" />
     <ClInclude Include="ConvectionKernels_UnfinishedEndpoints.h" />
     <ClInclude Include="ConvectionKernels_Util.h" />
   </ItemGroup>

@@ -101,5 +101,8 @@
     <ClInclude Include="ConvectionKernels_EndpointRefiner.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="ConvectionKernels_S3TC_SingleColor.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>
