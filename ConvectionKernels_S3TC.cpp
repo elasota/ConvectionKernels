@@ -483,7 +483,7 @@ void cvtt::Internal::S3TCComputer::TestSingleColor(uint32_t flags, const MUInt15
             for (int ch = 0; ch < 3; ch++)
                 ParallelMath::ConditionalSet(bestEndpoints[epi][ch], better16, eps[epi][ch]);
 
-        MUInt15 vindexes = ParallelMath::MakeUInt15(1);
+        MUInt15 vindexes = ParallelMath::MakeUInt15(range == 4 ? 2 : 1);
         for (int px = 0; px < 16; px++)
             ParallelMath::ConditionalSet(bestIndexes[px], better16, vindexes);
 
