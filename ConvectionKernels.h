@@ -140,7 +140,7 @@ namespace cvtt
 
     namespace Kernels
     {
-        typedef void* allocFunc_t(void* context, size_t size);
+        typedef void* allocFunc_t(void *context, size_t size);
         typedef void freeFunc_t(void *context, void* ptr, size_t size);
 
         // NOTE: All functions accept and output NumParallelBlocks blocks at once
@@ -159,10 +159,10 @@ namespace cvtt
 
         // ETC compression requires temporary storage that normally consumes a large amount of stack space.
         // To allocate and release it, use one of these functions.
-        ETC2CompressionData *AllocETC2Data(allocFunc_t allocFunc, void* context);
+        ETC2CompressionData *AllocETC2Data(allocFunc_t allocFunc, void *context);
         void ReleaseETC2Data(ETC2CompressionData *compressionData, freeFunc_t freeFunc);
 
-        ETC1CompressionData *AllocETC1Data(allocFunc_t allocFunc, void* context);
+        ETC1CompressionData *AllocETC1Data(allocFunc_t allocFunc, void *context);
         void ReleaseETC1Data(ETC1CompressionData *compressionData, freeFunc_t freeFunc);
 
         void DecodeBC6HU(PixelBlockF16 *pBlocks, const uint8_t *pBC);
