@@ -22,6 +22,7 @@ Compressed texture format support:
 
 
 # Basic usage
+
 Include "ConvectionKernels.h"
 
 Depending on the input format, blocks should be pre-packed into one of the PixelBlock structures: PixelBlockU8 for unsigned LDR formats (BC1, BC2, BC3, BC7, BC4U, BC5U), PixelBlockS8 for signed LDR formats (BC4S, BC5S), and PixelBlockF16 for HDR formats (BC6H).  The block pixel order is left-to-right, top-to-bottom, and the channel order is red, green, blue, alpha.
@@ -36,7 +37,9 @@ Create an Options structure and fill it out:
   * alphaWeight: Alpha channel relative importance
   * seedPoints: Number of seed points to try, from 1 to 4.  Higher values improve quality.
 
-Once you've done that, call the corresponding encode function to digest the input blocks and emit output blocks.  The encode functions must be given a list of cvtt::NumParallelBlocks blocks, and will emit cvtt::NumParallelBlocks output blocks.  If you want to encode fewer blocks, then you must pad the input structure with unused block data.  Generally, padding it with a duplicate of one of the blocks will produce the best results.
+Once you've done that, call the corresponding encode function to digest the input blocks and emit output blocks.
+
+**VERY IMPORTANT**: The encode functions must be given a list of cvtt::NumParallelBlocks blocks, and will emit cvtt::NumParallelBlocks output blocks.  If you want to encode fewer blocks, then you must pad the input structure with unused block data, and the output buffer must still contain enough space.
 
 # ETC compression
 
