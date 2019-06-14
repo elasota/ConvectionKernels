@@ -14,6 +14,7 @@ namespace cvtt
         public:
             static void CompressETC1Block(uint8_t *outputBuffer, const PixelBlockU8 *inputBlocks, ETC1CompressionData *compressionData, const Options &options);
             static void CompressETC2Block(uint8_t *outputBuffer, const PixelBlockU8 *inputBlocks, ETC2CompressionData *compressionData, const Options &options);
+            static void CompressETC2AlphaBlock(uint8_t *outputBuffer, const PixelBlockU8 *inputBlocks, const Options &options);
 
             static ETC2CompressionData *AllocETC2Data(cvtt::Kernels::allocFunc_t allocFunc, void *context);
             static void ReleaseETC2Data(ETC2CompressionData *compressionData, cvtt::Kernels::freeFunc_t freeFunc);
@@ -27,6 +28,7 @@ namespace cvtt
             typedef ParallelMath::UInt15 MUInt15;
             typedef ParallelMath::UInt16 MUInt16;
             typedef ParallelMath::SInt32 MSInt32;
+            typedef ParallelMath::UInt31 MUInt31;
 
             struct DifferentialResolveStorage
             {
@@ -96,6 +98,8 @@ namespace cvtt
             static void ConvertToFakeBT709(MFloat yuv[3], const MFloat color[3]);
             static void ConvertToFakeBT709(MFloat yuv[3], const MFloat &r, const MFloat &g, const MFloat &b);
             static void ConvertFromFakeBT709(MFloat rgb[3], const MFloat yuv[3]);
+
+            static void QuantizeETC2Alpha(int tableIndex, const MUInt15& value, const MUInt15& baseValue, const MUInt15& multiplier, MUInt15& outIndexes, MUInt15& outQuantizedValues);
         };
     }
 }

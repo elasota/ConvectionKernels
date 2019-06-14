@@ -228,6 +228,21 @@ namespace cvtt
             }
         }
 
+        void EncodeETC2Alpha(uint8_t *pBC, const PixelBlockU8 *pBlocks, const cvtt::Options &options)
+        {
+            assert(pBlocks);
+            assert(pBC);
+
+            float channelWeights[4];
+            Util::FillWeights(options, channelWeights);
+
+            for (size_t blockBase = 0; blockBase < cvtt::NumParallelBlocks; blockBase += ParallelMath::ParallelSize)
+            {
+                Internal::ETCComputer::CompressETC2AlphaBlock(pBC, pBlocks + blockBase, options);
+                pBC += ParallelMath::ParallelSize * 8;
+            }
+        }
+
         void DecodeBC7(PixelBlockU8 *pBlocks, const uint8_t *pBC)
         {
             assert(pBlocks);

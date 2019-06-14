@@ -147,6 +147,75 @@ namespace MakeSingleColorTables
             w.WriteLine();
         }
 
+        static void MakeETC2AlphaRoundingTables(string path)
+        {
+            int numRounders = 13;
+
+            int[] etc2alphatable =
+            {
+                2, 5, 8, 14,
+                2, 6, 9, 12,
+                1, 4, 7, 12,
+                1, 3, 5, 12,
+                2, 5, 7, 11,
+                2, 6, 8, 10,
+                3, 6, 7, 10,
+                2, 4, 7, 10,
+                1, 5, 7, 9,
+                1, 4, 7, 9,
+                1, 3, 7, 9,
+                1, 4, 6, 9,
+                2, 3, 6, 9,
+                0, 1, 2, 9,
+                3, 5, 7, 8,
+                2, 4, 6, 8,
+            };
+
+            using (StreamWriter w = new StreamWriter(path))
+            {
+                w.WriteLine("#pragma once");
+                w.WriteLine("#include <stdint.h>");
+                w.WriteLine();
+
+                w.WriteLine("namespace cvtt { namespace Tables { namespace ETC2 {");
+                w.WriteLine("    const int g_alphaRoundingTableWidth = " + numRounders.ToString() + ";");
+                w.WriteLine("    const uint8_t g_alphaRoundingTables[16][" + numRounders.ToString() + "] =");
+                w.WriteLine("    {");
+
+                for (int table = 0; table < 16; table++)
+                {
+                    w.Write("        { ");
+
+                    int baseIndex = table * 4;
+                    for (int rounder = 0; rounder < numRounders; rounder++)
+                    {
+                        int bestIndex = 0;
+                        int bestDistance = 9999;
+
+                        for (int index = 0; index < 4; index++)
+                        {
+                            int absDiff = Math.Abs(rounder - etc2alphatable[baseIndex + index]);
+                            if (absDiff < bestDistance)
+                            {
+                                bestDistance = absDiff;
+                                bestIndex = index;
+                            }
+                        }
+
+                        if (rounder != 0)
+                            w.Write(", ");
+
+                        w.Write(bestIndex.ToString());
+                    }
+
+                    w.WriteLine(" },");
+                }
+
+                w.WriteLine("    };");
+                w.WriteLine("}}}");
+            }
+        }
+
         static void Main(string[] args)
         {
             string[] filenames = { "ConvectionKernels_BC7_SingleColor.h", "ConvectionKernels_S3TC_SingleColor.h" };
@@ -268,6 +337,8 @@ namespace MakeSingleColorTables
                     w.WriteLine("}}}");
                 }
             }
+
+            MakeETC2AlphaRoundingTables("ConvectionKernels_ETC2_Rounding.h");
         }
     }
 }

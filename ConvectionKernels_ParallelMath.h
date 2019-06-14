@@ -41,6 +41,24 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #define UNREFERENCED_PARAMETER(n) ((void)n)
 
+// Parallel math implementation
+//
+// After preprocessor defs are handled, what this should do is expose the following types:
+// SInt16 - Signed 16-bit integer
+// UInt16 - Signed 16-bit integer
+// UInt15 - Unsigned 15-bit integer
+// SInt32 - Signed 32-bit integer
+// UInt31 - Unsigned 31-bit integer
+// AInt16 - 16-bit integer of unknown signedness (only used for storage)
+// Int16CompFlag - Comparison flags from comparing 16-bit integers
+// Int32CompFlag - Comparison flags from comparing 32-bit integers
+// FloatCompFlag - Comparison flags from comparing 32-bit floats
+//
+// The reason for these distinctions are that depending on the instruction set, signed or unsigned versions of certain ops
+// (particularly max, min, compares, and right shift) may not be available.  In cases where ops are not available, it's
+// necessary to do high bit manipulations to accomplish the operation with 16-bit numbers.  The 15-bit and 31-bit uint types
+// can elide the bit flips if unsigned versions are not available.
+
 namespace cvtt
 {
 #ifdef CVTT_USE_SSE2
@@ -137,6 +155,13 @@ namespace cvtt
             {
                 VInt16 result;
                 result.m_value = _mm_slli_epi16(m_value, bits);
+                return result;
+            }
+
+            inline VInt16 operator^(const VInt16 &other) const
+            {
+                VInt16 result;
+                result.m_value = _mm_xor_si128(m_value, other.m_value);
                 return result;
             }
         };
@@ -315,11 +340,25 @@ namespace cvtt
                 result.m_value = _mm_or_si128(m_value, other.m_value);
                 return result;
             }
+        };
 
-            inline Int16CompFlag operator~() const
+        struct Int32CompFlag
+        {
+            __m128i m_values[2];
+
+            inline Int32CompFlag operator&(const Int32CompFlag &other) const
             {
-                Int16CompFlag result;
-                result.m_value = _mm_xor_si128(m_value, _mm_set1_epi32(-1));
+                Int32CompFlag result;
+                result.m_values[0] = _mm_and_si128(m_values[0], other.m_values[0]);
+                result.m_values[1] = _mm_and_si128(m_values[1], other.m_values[1]);
+                return result;
+            }
+
+            inline Int32CompFlag operator|(const Int32CompFlag &other) const
+            {
+                Int32CompFlag result;
+                result.m_values[0] = _mm_or_si128(m_values[0], other.m_values[0]);
+                result.m_values[1] = _mm_or_si128(m_values[1], other.m_values[1]);
                 return result;
             }
         };
@@ -671,6 +710,14 @@ namespace cvtt
             reinterpret_cast<int16_t*>(&dest)[offset] = v ? -1 : 0;
         }
 
+        static Int32CompFlag Less(const UInt31 &a, const UInt31 &b)
+        {
+            Int32CompFlag result;
+            result.m_values[0] = _mm_cmplt_epi32(a.m_values[0], b.m_values[0]);
+            result.m_values[1] = _mm_cmplt_epi32(a.m_values[1], b.m_values[1]);
+            return result;
+        }
+
         static Int16CompFlag Less(const SInt16 &a, const SInt16 &b)
         {
             Int16CompFlag result;
@@ -809,6 +856,16 @@ namespace cvtt
             return result;
         }
 
+        static Int16CompFlag Int32FlagToInt16(const Int32CompFlag &v)
+        {
+            __m128i lo = v.m_values[0];
+            __m128i hi = v.m_values[1];
+
+            Int16CompFlag result;
+            result.m_value = _mm_packs_epi32(lo, hi);
+            return result;
+        }
+
         static Int16CompFlag MakeBoolInt16(bool b)
         {
             Int16CompFlag result;
@@ -833,6 +890,21 @@ namespace cvtt
         {
             Int16CompFlag result;
             result.m_value = _mm_andnot_si128(b.m_value, a.m_value);
+            return result;
+        }
+
+        static Int16CompFlag Not(const Int16CompFlag &b)
+        {
+            Int16CompFlag result;
+            result.m_value = _mm_xor_si128(b.m_value, _mm_set1_epi32(-1));
+            return result;
+        }
+
+        static Int32CompFlag Not(const Int32CompFlag &b)
+        {
+            Int32CompFlag result;
+            result.m_values[0] = _mm_xor_si128(b.m_values[0], _mm_set1_epi32(-1));
+            result.m_values[1] = _mm_xor_si128(b.m_values[1], _mm_set1_epi32(-1));
             return result;
         }
 
@@ -1437,6 +1509,12 @@ namespace cvtt
             return v;
         }
 
+        static float Extract(float v, int offset)
+        {
+            UNREFERENCED_PARAMETER(offset);
+            return v;
+        }
+
         static void PutUInt16(int32_t &dest, int offset, ParallelMath::ScalarUInt16 v)
         {
             UNREFERENCED_PARAMETER(offset);
@@ -1462,6 +1540,12 @@ namespace cvtt
         }
 
         static void PutFloat(float &dest, int offset, float v)
+        {
+            UNREFERENCED_PARAMETER(offset);
+            dest = v;
+        }
+
+        static void PutBoolInt16(bool &dest, int offset, bool v)
         {
             UNREFERENCED_PARAMETER(offset);
             dest = v;
@@ -1517,6 +1601,11 @@ namespace cvtt
             return v;
         }
 
+        static bool Int32FlagToInt16(bool v)
+        {
+            return v;
+        }
+
         static bool Int16FlagToFloat(bool v)
         {
             return v;
@@ -1535,6 +1624,11 @@ namespace cvtt
         static bool AndNot(bool a, bool b)
         {
             return a && !b;
+        }
+
+        static bool Not(bool b)
+        {
+            return !b;
         }
 
         static int32_t RoundAndConvertToInt(float v, const ParallelMath::RoundTowardZeroForScope *rtz)

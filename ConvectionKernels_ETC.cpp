@@ -38,6 +38,7 @@ http://go.microsoft.com/fwlink/?LinkId=248926
 #include "ConvectionKernels_ETC.h"
 #include "ConvectionKernels_ETC1.h"
 #include "ConvectionKernels_ETC2.h"
+#include "ConvectionKernels_ETC2_Rounding.h"
 #include "ConvectionKernels_ParallelMath.h"
 
 cvtt::ParallelMath::Float cvtt::Internal::ETCComputer::ComputeErrorUniform(const MUInt15 pixelA[3], const MUInt15 pixelB[3])
@@ -686,7 +687,7 @@ void cvtt::Internal::ETCComputer::EncodeHMode(uint8_t *outputBuffer, MFloat &bes
             uint32_t lowBits = 0;
             uint32_t highBits = 0;
 
-            uint16_t blockBestColors[2] = { ParallelMath::Extract(bestColors[0], block), ParallelMath::Extract(bestColors[1], block) };
+            ParallelMath::ScalarUInt16 blockBestColors[2] = { ParallelMath::Extract(bestColors[0], block), ParallelMath::Extract(bestColors[1], block) };
 
             if (blockBestColors[0] == blockBestColors[1])
                 continue;	// TODO: Encode this as T mode instead
@@ -698,9 +699,9 @@ void cvtt::Internal::ETCComputer::EncodeHMode(uint8_t *outputBuffer, MFloat &bes
                     colors[sector][ch] = (blockBestColors[sector] >> ((2 - ch) * 5)) & 15;
             }
 
-            uint16_t blockBestSectorBits = ParallelMath::Extract(bestSectorBits, block);
-            uint16_t blockBestSignBits = ParallelMath::Extract(bestSignBits, block);
-            uint16_t blockBestTable = ParallelMath::Extract(bestTable, block);
+            ParallelMath::ScalarUInt16 blockBestSectorBits = ParallelMath::Extract(bestSectorBits, block);
+            ParallelMath::ScalarUInt16 blockBestSignBits = ParallelMath::Extract(bestSignBits, block);
+            ParallelMath::ScalarUInt16 blockBestTable = ParallelMath::Extract(bestTable, block);
 
             if (((blockBestTable & 1) == 1) != (blockBestColors[0] > blockBestColors[1]))
             {
@@ -1239,13 +1240,149 @@ void cvtt::Internal::ETCComputer::CompressETC2Block(uint8_t *outputBuffer, const
 
     // Flip sector assignments
     for (int px = 0; px < 16; px++)
-        sectorAssignments[px] = ~sectorAssignments[px];
+        sectorAssignments[px] = ParallelMath::Not(sectorAssignments[px]);
 
     EncodeTMode(outputBuffer, bestError, sectorAssignments, pixels, preWeightedPixels, options);
 
     EncodeHMode(outputBuffer, bestError, sectorAssignments, pixels, internalData->m_h, preWeightedPixels, options);
 
     CompressETC1BlockInternal(bestError, outputBuffer, pixels, preWeightedPixels, internalData->m_drs, options);
+}
+
+void cvtt::Internal::ETCComputer::CompressETC2AlphaBlock(uint8_t *outputBuffer, const PixelBlockU8 *pixelBlocks, const Options &options)
+{
+    MUInt15 pixels[16];
+    MUInt15 minAlpha = ParallelMath::MakeUInt15(255);
+    MUInt15 maxAlpha = ParallelMath::MakeUInt15(0);
+
+    for (int px = 0; px < 16; px++)
+    {
+        for (int block = 0; block < ParallelMath::ParallelSize; block++)
+            ParallelMath::PutUInt15(pixels[px], block, pixelBlocks[block].m_pixels[px][3]);
+    }
+
+    for (int px = 0; px < 16; px++)
+    {
+        minAlpha = ParallelMath::Min(minAlpha, pixels[px]);
+        maxAlpha = ParallelMath::Max(maxAlpha, pixels[px]);
+    }
+
+    MUInt15 alphaSpan = maxAlpha - minAlpha;
+    MUInt15 alphaSpanMidpointTimes2 = maxAlpha + minAlpha;
+
+    MUInt31 bestTotalError = ParallelMath::MakeUInt31(0x7fffffff);
+    MUInt15 bestTableIndex = ParallelMath::MakeUInt15(0);
+    MUInt15 bestBaseCodeword = ParallelMath::MakeUInt15(0);
+    MUInt15 bestMultiplier = ParallelMath::MakeUInt15(0);
+    MUInt15 bestIndexes[16];
+
+    for (int px = 0; px < 16; px++)
+        bestIndexes[px] = ParallelMath::MakeUInt15(0);
+
+    const int numAlphaRanges = 10;
+    for (uint16_t tableIndex = 0; tableIndex < 16; tableIndex++)
+    {
+        for (int r = 0; r < numAlphaRanges; r++)
+        {
+            int subrange = r % 3;
+            int mainRange = r / 3;
+
+            int16_t maxOffset = Tables::ETC2::g_alphaModifierTablePositive[tableIndex][3 - mainRange - (subrange & 1)];
+            int16_t minOffset = -Tables::ETC2::g_alphaModifierTablePositive[tableIndex][3 - mainRange - ((subrange >> 1) & 1)] - 1;
+            uint16_t offsetSpan = static_cast<uint16_t>(maxOffset - minOffset);
+
+            MSInt16 vminOffset = ParallelMath::MakeSInt16(minOffset);
+            MUInt15 vmaxOffset = ParallelMath::MakeUInt15(maxOffset);
+            MUInt15 voffsetSpan = ParallelMath::MakeUInt15(offsetSpan);
+
+            MUInt15 minMultiplier = ParallelMath::MakeUInt15(0);
+            for (int block = 0; block < ParallelMath::ParallelSize; block++)
+            {
+                uint16_t singleAlphaSpan = ParallelMath::Extract(alphaSpan, block);
+
+                uint16_t lowMultiplier = singleAlphaSpan / offsetSpan;
+                ParallelMath::PutUInt15(minMultiplier, block, lowMultiplier);
+            }
+
+            // We cap at 1 and 14 so both multipliers are valid and dividable
+            // Cases where offset span is 0 should be caught by multiplier 1 of table 13
+            minMultiplier = ParallelMath::Max(ParallelMath::Min(minMultiplier, ParallelMath::MakeUInt15(14)), ParallelMath::MakeUInt15(1));
+
+            for (uint16_t multiplierOffset = 0; multiplierOffset < 2; multiplierOffset++)
+            {
+                MUInt15 multiplier = ParallelMath::MakeUInt15(multiplierOffset) + minMultiplier;
+
+                MSInt16 multipliedMinOffset = ParallelMath::CompactMultiply(ParallelMath::LosslessCast<MSInt16>::Cast(multiplier), vminOffset);
+                MUInt15 multipliedMaxOffset = ParallelMath::LosslessCast<MUInt15>::Cast(ParallelMath::CompactMultiply(multiplier, vmaxOffset));
+
+                // codeword = (maxOffset + minOffset + minAlpha + maxAlpha) / 2
+                MSInt16 unclampedBaseAlphaTimes2 = ParallelMath::LosslessCast<MSInt16>::Cast(alphaSpanMidpointTimes2) - ParallelMath::LosslessCast<MSInt16>::Cast(multipliedMaxOffset) - multipliedMinOffset;
+
+                MUInt15 clampedBaseAlphaTimes2 = ParallelMath::Min(ParallelMath::LosslessCast<MUInt15>::Cast(ParallelMath::Max(unclampedBaseAlphaTimes2, ParallelMath::MakeSInt16(0))), ParallelMath::MakeUInt15(510));
+                MUInt15 baseAlpha = ParallelMath::RightShift(clampedBaseAlphaTimes2 + ParallelMath::MakeUInt15(1), 1);
+
+                MUInt15 indexes[16];
+                MUInt31 totalError = ParallelMath::MakeUInt31(0);
+                for (int px = 0; px < 16; px++)
+                {
+                    MUInt15 quantizedValues;
+                    QuantizeETC2Alpha(tableIndex, pixels[px], baseAlpha, multiplier, indexes[px], quantizedValues);
+
+                    totalError = totalError + ParallelMath::ToUInt31(ParallelMath::SqDiffUInt8(quantizedValues, pixels[px]));
+                }
+
+                ParallelMath::Int16CompFlag isBetter = ParallelMath::Int32FlagToInt16(ParallelMath::Less(totalError, bestTotalError));
+                if (ParallelMath::AnySet(isBetter))
+                {
+                    ParallelMath::ConditionalSet(bestTotalError, isBetter, totalError);
+                    ParallelMath::ConditionalSet(bestTableIndex, isBetter, ParallelMath::MakeUInt15(tableIndex));
+                    ParallelMath::ConditionalSet(bestBaseCodeword, isBetter, baseAlpha);
+                    ParallelMath::ConditionalSet(bestMultiplier, isBetter, multiplier);
+
+                    for (int px = 0; px < 16; px++)
+                        ParallelMath::ConditionalSet(bestIndexes[px], isBetter, indexes[px]);
+                }
+
+                // TODO: Do one refine pass
+            }
+        }
+    }
+
+    for (int block = 0; block < ParallelMath::ParallelSize; block++)
+    {
+        uint8_t *output = outputBuffer + block * 8;
+        output[0] = static_cast<uint8_t>(ParallelMath::Extract(bestBaseCodeword, block));
+
+        ParallelMath::ScalarUInt16 multiplier = ParallelMath::Extract(bestMultiplier, block);
+        ParallelMath::ScalarUInt16 tableIndex = ParallelMath::Extract(bestTableIndex, block);
+
+        output[1] = static_cast<uint8_t>((multiplier << 4) | tableIndex);
+
+        static const int pixelSelectorOrder[16] = { 0, 4, 8, 12, 1, 5, 9, 13, 2, 6, 10, 14, 3, 7, 11, 15 };
+
+        ParallelMath::ScalarUInt16 indexes[16];
+        for (int px = 0; px < 16; px++)
+            indexes[pixelSelectorOrder[px]] = ParallelMath::Extract(bestIndexes[px], block);
+
+        int outputOffset = 2;
+        int outputBits = 0;
+        int numOutputBits = 0;
+        for (int s = 0; s < 16; s++)
+        {
+            outputBits = (outputBits << 3) | indexes[s];
+            numOutputBits += 3;
+
+            if (numOutputBits >= 8)
+            {
+                output[outputOffset++] = static_cast<uint8_t>(outputBits >> (numOutputBits - 8));
+                numOutputBits -= 8;
+
+                outputBits &= ((1 << numOutputBits) - 1);
+            }
+        }
+
+        assert(outputOffset == 8 && numOutputBits == 0);
+    }
 }
 
 void cvtt::Internal::ETCComputer::CompressETC1Block(uint8_t *outputBuffer, const PixelBlockU8 *inputBlocks, ETC1CompressionData *compressionData, const Options &options)
@@ -1419,6 +1556,46 @@ void cvtt::Internal::ETCComputer::ConvertFromFakeBT709(MFloat rgb[3], const MFlo
     rgb[0] = yy + u * 1.5748000207960953486f;
     rgb[1] = yy - u * 0.46812425854364753669f - v * 0.26491652528157560861f;
     rgb[2] = yy + v * 2.6242146882856944069f;
+}
+
+
+void cvtt::Internal::ETCComputer::QuantizeETC2Alpha(int tableIndex, const MUInt15& value, const MUInt15& baseValue, const MUInt15& multiplier, MUInt15& outIndexes, MUInt15& outQuantizedValues)
+{
+    MSInt16 offset = ParallelMath::LosslessCast<MSInt16>::Cast(value) - ParallelMath::LosslessCast<MSInt16>::Cast(baseValue);
+    MSInt16 offsetTimes2 = offset + offset;
+
+    // ETC2's offset tables all have a reflect about 0.5*multiplier
+    MSInt16 offsetAboutReflectorTimes2 = offsetTimes2 + ParallelMath::LosslessCast<MSInt16>::Cast(multiplier);
+
+    MUInt15 absOffsetAboutReflectorTimes2 = ParallelMath::LosslessCast<MUInt15>::Cast(ParallelMath::Abs(offsetAboutReflectorTimes2));
+    MUInt15 lookupIndex = ParallelMath::RightShift(absOffsetAboutReflectorTimes2, 1);
+
+    MUInt15 positiveIndex;
+    MUInt15 positiveOffsetUnmultiplied;
+    for (int block = 0; block < ParallelMath::ParallelSize; block++)
+    {
+        uint16_t blockLookupIndex = ParallelMath::Extract(lookupIndex, block) / ParallelMath::Extract(multiplier, block);
+        if (blockLookupIndex >= Tables::ETC2::g_alphaRoundingTableWidth)
+            blockLookupIndex = Tables::ETC2::g_alphaRoundingTableWidth - 1;
+        uint16_t index = Tables::ETC2::g_alphaRoundingTables[tableIndex][blockLookupIndex];
+        ParallelMath::PutUInt15(positiveIndex, block, index);
+        ParallelMath::PutUInt15(positiveOffsetUnmultiplied, block, Tables::ETC2::g_alphaModifierTablePositive[tableIndex][index]);
+
+        // TODO: This is suboptimal when the offset is capped.  We should detect 0 and 255 values and always map them to the maximum offsets.
+        // Doing that will also affect refinement though.
+    }
+
+    MSInt16 signBits = ParallelMath::RightShift(offsetAboutReflectorTimes2, 15);
+    MSInt16 offsetUnmultiplied = ParallelMath::LosslessCast<MSInt16>::Cast(positiveOffsetUnmultiplied) ^ signBits;
+    MSInt16 quantizedOffset = ParallelMath::CompactMultiply(offsetUnmultiplied, multiplier);
+
+    MSInt16 offsetValue = ParallelMath::LosslessCast<MSInt16>::Cast(baseValue) + quantizedOffset;
+
+    outQuantizedValues = ParallelMath::Min(ParallelMath::MakeUInt15(255), ParallelMath::LosslessCast<MUInt15>::Cast(ParallelMath::Max(ParallelMath::MakeSInt16(0), offsetValue)));
+
+    MUInt15 indexSub = ParallelMath::LosslessCast<MUInt15>::Cast(signBits) & ParallelMath::MakeUInt15(4);
+
+    outIndexes = positiveIndex + ParallelMath::MakeUInt15(4) - indexSub;
 }
 
 void cvtt::Internal::ETCComputer::CompressETC1BlockInternal(MFloat &bestTotalError, uint8_t *outputBuffer, const MUInt15 pixels[16][3], const MFloat preWeightedPixels[16][3], DifferentialResolveStorage &drs, const Options &options)
