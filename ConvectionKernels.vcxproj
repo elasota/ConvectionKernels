@@ -153,6 +153,7 @@
     <ClInclude Include="ConvectionKernels_ETC.h" />
     <ClInclude Include="ConvectionKernels_ETC1.h" />
     <ClInclude Include="ConvectionKernels_ETC2.h" />
+    <ClInclude Include="ConvectionKernels_ETC2_Rounding.h" />
     <ClInclude Include="ConvectionKernels_IndexSelector.h" />
     <ClInclude Include="ConvectionKernels_IndexSelectorHDR.h" />
     <ClInclude Include="ConvectionKernels_PackedCovarianceMatrix.h" />
