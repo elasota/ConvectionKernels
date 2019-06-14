@@ -2,18 +2,20 @@
 These are the stand-alone texture compression kernels for Convection Texture Tools (CVTT), you can embed these in other applications.
 https://github.com/elasota/cvtt
 
-The CVTT codecs are designed to get very high quality at good speed by leveraging effective heuristics and an SIMT-style design that makes heavy use of SIMD ops and 16-bit math.
+The CVTT codecs are designed to get very high quality at good speed by leveraging effective heuristics and a SPMD-style design that makes heavy use of SIMD ops and 16-bit math.
 
 Compressed texture format support:
- * BC1: Complete
- * BC2: Complete
- * BC3: Complete
+ * BC1 (DXT1): Complete
+ * BC2 (DXT3): Complete
+ * BC3 (DXT5): Complete
  * BC4: Complete
  * BC5: Complete
  * BC6H: Experimental
  * BC7: Complete
  * ETC1: Complete
- * ETC2: RGB only
+ * ETC2 RGB: Complete
+ * ETC2 RGBA: Complete
+ * ETC2 with punchthrough alpha: Not supported
  * 11-bit EAC: Not supported
  * PVRTC: Not supported
  * ASTC: Not supported

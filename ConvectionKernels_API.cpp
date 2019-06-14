@@ -243,6 +243,24 @@ namespace cvtt
             }
         }
 
+        void EncodeETC2RGBA(uint8_t *pBC, const PixelBlockU8 *pBlocks, const cvtt::Options &options, cvtt::ETC2CompressionData *compressionData)
+        {
+            uint8_t alphaBlockData[cvtt::NumParallelBlocks * 8];
+            uint8_t colorBlockData[cvtt::NumParallelBlocks * 8];
+
+            EncodeETC2(colorBlockData, pBlocks, options, compressionData);
+            EncodeETC2Alpha(alphaBlockData, pBlocks, options);
+
+            for (size_t blockBase = 0; blockBase < cvtt::NumParallelBlocks; blockBase++)
+            {
+                for (size_t blockData = 0; blockData < 8; blockData++)
+                    pBC[blockBase * 16 + blockData] = alphaBlockData[blockBase * 8 + blockData];
+
+                for (size_t blockData = 0; blockData < 8; blockData++)
+                    pBC[blockBase * 16 + 8 + blockData] = colorBlockData[blockBase * 8 + blockData];
+            }
+        }
+
         void DecodeBC7(PixelBlockU8 *pBlocks, const uint8_t *pBC)
         {
             assert(pBlocks);
