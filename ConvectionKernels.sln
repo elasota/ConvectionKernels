@@ -5,7 +5,7 @@ VisualStudioVersion = 15.0.27130.2020
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ConvectionKernels", "ConvectionKernels.vcxproj", "{5E4F0557-B7D8-4D9B-9D3A-2B966C9C1B47}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MakeSingleColorTables", "MakeSingleColorTables\MakeSingleColorTables.csproj", "{867F8F36-10EA-4594-AA41-34BC5B74A65A}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MakeTables", "MakeTables\MakeTables.csproj", "{867F8F36-10EA-4594-AA41-34BC5B74A65A}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
