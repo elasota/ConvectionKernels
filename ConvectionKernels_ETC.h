@@ -92,7 +92,8 @@ namespace cvtt
             static void CompressETC1BlockInternal(MFloat &bestTotalError, uint8_t *outputBuffer, const MUInt15 pixels[16][3], const MFloat preWeightedPixels[16][3], DifferentialResolveStorage& compressionData, const Options &options);
             static void ExtractBlocks(MUInt15 pixels[16][3], MFloat preWeightedPixels[16][3], const PixelBlockU8 *inputBlocks, const Options &options);
 
-            static void ResolveHalfBlockFakeBT709Rounding(MUInt15 quantized[3], const MUInt15 sectorCumulative[3], bool isDifferential);
+            static void ResolveHalfBlockFakeBT709RoundingAccurate(MUInt15 quantized[3], const MUInt15 sectorCumulative[3], bool isDifferential);
+            static void ResolveHalfBlockFakeBT709RoundingFast(MUInt15 quantized[3], const MUInt15 sectorCumulative[3], bool isDifferential);
             static void ResolveTHFakeBT709Rounding(MUInt15 quantized[3], const MUInt15 target[3], const MUInt15 &granularity);
             static void ConvertToFakeBT709(MFloat yuv[3], const MUInt15 color[3]);
             static void ConvertToFakeBT709(MFloat yuv[3], const MFloat color[3]);

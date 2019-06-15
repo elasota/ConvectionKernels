@@ -40,6 +40,7 @@ http://go.microsoft.com/fwlink/?LinkId=248926
 #include "ConvectionKernels_ETC2.h"
 #include "ConvectionKernels_ETC2_Rounding.h"
 #include "ConvectionKernels_ParallelMath.h"
+#include "ConvectionKernels_FakeBT709_Rounding.h"
 
 cvtt::ParallelMath::Float cvtt::Internal::ETCComputer::ComputeErrorUniform(const MUInt15 pixelA[3], const MUInt15 pixelB[3])
 {
@@ -1426,8 +1427,32 @@ void cvtt::Internal::ETCComputer::ExtractBlocks(MUInt15 pixels[16][3], MFloat pr
     }
 }
 
-void cvtt::Internal::ETCComputer::ResolveHalfBlockFakeBT709Rounding(MUInt15 quantized[3], const MUInt15 sectorCumulative[3], bool isDifferential)
+void cvtt::Internal::ETCComputer::ResolveHalfBlockFakeBT709RoundingAccurate(MUInt15 quantized[3], const MUInt15 sectorCumulative[3], bool isDifferential)
 {
+    for (int ch = 0; ch < 3; ch++)
+    {
+        const MUInt15& cu15 = sectorCumulative[ch];
+
+        if (isDifferential)
+        {
+            //quantized[ch] = (cu * 31 + (cu >> 3)) >> 11;
+            quantized[ch] = ParallelMath::ToUInt15(
+                ParallelMath::RightShift(
+                (ParallelMath::LosslessCast<MUInt16>::Cast(cu15) << 5) - ParallelMath::LosslessCast<MUInt16>::Cast(cu15) + ParallelMath::LosslessCast<MUInt16>::Cast(ParallelMath::RightShift(cu15, 3))
+                    , 11)
+            );
+        }
+        else
+        {
+            //quantized[ch] = (cu * 30 + (cu >> 3)) >> 12;
+            quantized[ch] = ParallelMath::ToUInt15(
+                ParallelMath::RightShift(
+                (ParallelMath::LosslessCast<MUInt16>::Cast(cu15) << 5) - ParallelMath::LosslessCast<MUInt16>::Cast(cu15 << 1) + ParallelMath::LosslessCast<MUInt16>::Cast(ParallelMath::RightShift(cu15, 3))
+                    , 12)
+            );
+        }
+    }
+
     MFloat lowOctantRGBFloat[3];
     MFloat highOctantRGBFloat[3];
 
@@ -1477,6 +1502,54 @@ void cvtt::Internal::ETCComputer::ResolveHalfBlockFakeBT709Rounding(MUInt15 quan
 
     for (int ch = 0; ch < 3; ch++)
         quantized[ch] = quantized[ch] + (ParallelMath::RightShift(bestOctant, ch) & ParallelMath::MakeUInt15(1));
+}
+
+void cvtt::Internal::ETCComputer::ResolveHalfBlockFakeBT709RoundingFast(MUInt15 quantized[3], const MUInt15 sectorCumulative[3], bool isDifferential)
+{
+    // sectorCumulative range is 0..2040 (11 bits)
+    MUInt15 roundingOffset = ParallelMath::MakeUInt15(0);
+
+    MUInt15 rOffset;
+    MUInt15 gOffset;
+    MUInt15 bOffset;
+    MUInt15 quantizedBase[3];
+    MUInt15 upperBound;
+
+    if (isDifferential)
+    {
+        MUInt15 rOffset = (sectorCumulative[0] << 6);
+        MUInt15 gOffset = (sectorCumulative[1] << 2);
+        MUInt15 bOffset = ParallelMath::RightShift(sectorCumulative[2], 2);
+
+        for (int ch = 0; ch < 3; ch++)
+            quantizedBase[ch] = ParallelMath::RightShift(sectorCumulative[ch], 6);
+
+        upperBound = ParallelMath::MakeUInt15(31);
+    }
+    else
+    {
+        MUInt15 rOffset = (sectorCumulative[0] << 5);
+        MUInt15 gOffset = (sectorCumulative[1] << 1);
+        MUInt15 bOffset = ParallelMath::RightShift(sectorCumulative[2], 3);
+
+        for (int ch = 0; ch < 3; ch++)
+            quantizedBase[ch] = ParallelMath::RightShift(sectorCumulative[ch], 7);
+
+        upperBound = ParallelMath::MakeUInt15(15);
+    }
+
+    MUInt15 lookupIndex = (rOffset | gOffset | bOffset);
+
+    MUInt15 octant;
+    for (int block = 0; block < ParallelMath::ParallelSize; block++)
+        ParallelMath::PutUInt15(octant, block, Tables::FakeBT709::g_rounding16[ParallelMath::Extract(lookupIndex, block)]);
+
+    quantizedBase[0] = quantizedBase[0] + (octant & ParallelMath::MakeUInt15(1));
+    quantizedBase[1] = quantizedBase[1] + (ParallelMath::RightShift(octant, 1) & ParallelMath::MakeUInt15(1));
+    quantizedBase[2] = quantizedBase[2] + (ParallelMath::RightShift(octant, 2) & ParallelMath::MakeUInt15(1));
+
+    for (int ch = 0; ch < 3; ch++)
+        quantized[ch] = ParallelMath::Min(quantizedBase[ch], upperBound);
 }
 
 void cvtt::Internal::ETCComputer::ResolveTHFakeBT709Rounding(MUInt15 quantized[3], const MUInt15 targets[3], const MUInt15 &granularity)
@@ -1738,29 +1811,13 @@ void cvtt::Internal::ETCComputer::CompressETC1BlockInternal(MFloat &bestTotalErr
                                     )
                                 );
 
-                                if (d == 1)
-                                {
-                                    //quantized[ch] = (cu * 31 + (cu >> 3)) >> 11;
-                                    quantized[ch] = ParallelMath::ToUInt15(
-                                        ParallelMath::RightShift(
-                                            (ParallelMath::LosslessCast<MUInt16>::Cast(cu15) << 5) - ParallelMath::LosslessCast<MUInt16>::Cast(cu15) + ParallelMath::LosslessCast<MUInt16>::Cast(ParallelMath::RightShift(cu15, 3))
-                                            , 11)
-                                        );
-                                }
-                                else
-                                {
-                                    //quantized[ch] = (cu * 30 + (cu >> 3)) >> 12;
-                                    quantized[ch] = ParallelMath::ToUInt15(
-                                        ParallelMath::RightShift(
-                                        (ParallelMath::LosslessCast<MUInt16>::Cast(cu15) << 5) - ParallelMath::LosslessCast<MUInt16>::Cast(cu15 << 1) + ParallelMath::LosslessCast<MUInt16>::Cast(ParallelMath::RightShift(cu15, 3))
-                                            , 12)
-                                    );
-                                }
-
                                 offsetCumulative[ch] = cu15;
 						    }
 
-                            ResolveHalfBlockFakeBT709Rounding(quantized, offsetCumulative, d == 1);
+                            if ((options.flags & cvtt::Flags::ETC_FakeBT709Accurate) != 0)
+                                ResolveHalfBlockFakeBT709RoundingAccurate(quantized, offsetCumulative, d == 1);
+                            else
+                                ResolveHalfBlockFakeBT709RoundingFast(quantized, offsetCumulative, d == 1);
                         }
 
 						possibleColors[oi] = quantized[0] | (quantized[1] << 5) | (quantized[2] << 10);

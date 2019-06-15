@@ -107,5 +107,8 @@
     <ClInclude Include="ConvectionKernels_ETC2_Rounding.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="ConvectionKernels_FakeBT709_Rounding.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

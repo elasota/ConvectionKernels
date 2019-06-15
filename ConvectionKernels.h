@@ -62,8 +62,11 @@ namespace cvtt
         // Uniform color channel importance
         const uint32_t Uniform                  = 0x200;
 
-        // Use fake BT.709 color space for etc2comp compatibility
+        // Use fake BT.709 color space for etc2comp compatibility (slower)
         const uint32_t ETC_UseFakeBT709         = 0x400;
+
+        // Use accurate quantization functions when quantizing fake BT.709 (much slower, marginal improvement on specific blocks)
+        const uint32_t ETC_FakeBT709Accurate    = 0x800;
 
         // Misc useful default flag combinations
         const uint32_t Fastest = (BC6H_FastIndexing | S3TC_Paranoid);
@@ -71,7 +74,7 @@ namespace cvtt
         const uint32_t Fast = (BC7_EnablePartitioning | BC7_EnableDualPlane | BC7_FastIndexing | S3TC_Paranoid);
         const uint32_t Default = (BC7_EnablePartitioning | BC7_EnableDualPlane | BC7_Enable3Subsets | BC7_FastIndexing | S3TC_Paranoid);
         const uint32_t Better = (BC7_EnablePartitioning | BC7_EnableDualPlane | BC7_Enable3Subsets | S3TC_Paranoid | S3TC_Exhaustive);
-        const uint32_t Ultra = (BC7_EnablePartitioning | BC7_EnableDualPlane | BC7_Enable3Subsets | BC7_TrySingleColor | S3TC_Paranoid | S3TC_Exhaustive);
+        const uint32_t Ultra = (BC7_EnablePartitioning | BC7_EnableDualPlane | BC7_Enable3Subsets | BC7_TrySingleColor | S3TC_Paranoid | S3TC_Exhaustive | ETC_FakeBT709Accurate);
     }
 
     const unsigned int NumParallelBlocks = 8;
