@@ -161,6 +161,7 @@ namespace cvtt
         void EncodeETC2(uint8_t *pBC, const PixelBlockU8 *pBlocks, const Options &options, ETC2CompressionData *compressionData);
         void EncodeETC2RGBA(uint8_t *pBC, const PixelBlockU8 *pBlocks, const cvtt::Options &options, cvtt::ETC2CompressionData *compressionData);
         void EncodeETC2Alpha(uint8_t *pBC, const PixelBlockU8 *pBlocks, const cvtt::Options &options);
+        void EncodeETC2PunchthroughAlpha(uint8_t *pBC, const PixelBlockU8 *pBlocks, const cvtt::Options &options, cvtt::ETC2CompressionData *compressionData);
 
         // ETC compression requires temporary storage that normally consumes a large amount of stack space.
         // To allocate and release it, use one of these functions.

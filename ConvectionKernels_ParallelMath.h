@@ -439,6 +439,11 @@ namespace cvtt
             dest.m_values[1] = _mm_or_si128(_mm_andnot_si128(highFlags, dest.m_values[1]), _mm_and_si128(highFlags, src.m_values[1]));
         }
 
+        static void ConditionalSet(ParallelMath::Int16CompFlag &dest, const Int16CompFlag &flag, const ParallelMath::Int16CompFlag &src)
+        {
+            dest.m_value = _mm_or_si128(_mm_andnot_si128(flag.m_value, dest.m_value), _mm_and_si128(flag.m_value, src.m_value));
+        }
+
         static SInt16 ConditionalNegate(const Int16CompFlag &flag, const SInt16 &v)
         {
             SInt16 result;
@@ -769,6 +774,13 @@ namespace cvtt
             for (int i = 0; i < 2; i++)
                 result.m_values[i] = _mm_cmpeq_ps(a.m_values[i], b.m_values[i]);
             return result;
+        }
+
+        static Int16CompFlag Equal(const Int16CompFlag &a, const Int16CompFlag &b)
+        {
+            Int16CompFlag notResult;
+            notResult.m_value = _mm_xor_si128(a.m_value, b.m_value);
+            return Not(notResult);
         }
 
         static Float ToFloat(const UInt16 &v)
@@ -1349,6 +1361,12 @@ namespace cvtt
         }
 
         static void ConditionalSet(int32_t& dest, bool flag, int32_t src)
+        {
+            if (flag)
+                dest = src;
+        }
+
+        static void ConditionalSet(bool& dest, bool flag, bool src)
         {
             if (flag)
                 dest = src;

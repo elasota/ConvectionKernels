@@ -223,7 +223,22 @@ namespace cvtt
 
             for (size_t blockBase = 0; blockBase < cvtt::NumParallelBlocks; blockBase += ParallelMath::ParallelSize)
             {
-                Internal::ETCComputer::CompressETC2Block(pBC, pBlocks + blockBase, compressionData, options);
+                Internal::ETCComputer::CompressETC2Block(pBC, pBlocks + blockBase, compressionData, options, false);
+                pBC += ParallelMath::ParallelSize * 8;
+            }
+        }
+
+        void EncodeETC2PunchthroughAlpha(uint8_t *pBC, const PixelBlockU8 *pBlocks, const cvtt::Options &options, cvtt::ETC2CompressionData *compressionData)
+        {
+            assert(pBlocks);
+            assert(pBC);
+
+            float channelWeights[4];
+            Util::FillWeights(options, channelWeights);
+
+            for (size_t blockBase = 0; blockBase < cvtt::NumParallelBlocks; blockBase += ParallelMath::ParallelSize)
+            {
+                Internal::ETCComputer::CompressETC2Block(pBC, pBlocks + blockBase, compressionData, options, true);
                 pBC += ParallelMath::ParallelSize * 8;
             }
         }
