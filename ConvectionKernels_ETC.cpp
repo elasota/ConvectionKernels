@@ -1517,9 +1517,9 @@ void cvtt::Internal::ETCComputer::ResolveHalfBlockFakeBT709RoundingFast(MUInt15 
 
     if (isDifferential)
     {
-        MUInt15 rOffset = (sectorCumulative[0] << 6);
-        MUInt15 gOffset = (sectorCumulative[1] << 2);
-        MUInt15 bOffset = ParallelMath::RightShift(sectorCumulative[2], 2);
+        rOffset = (sectorCumulative[0] << 6);
+        gOffset = (sectorCumulative[1] << 2);
+        bOffset = ParallelMath::RightShift(sectorCumulative[2], 2);
 
         for (int ch = 0; ch < 3; ch++)
             quantizedBase[ch] = ParallelMath::RightShift(sectorCumulative[ch], 6);
@@ -1528,9 +1528,9 @@ void cvtt::Internal::ETCComputer::ResolveHalfBlockFakeBT709RoundingFast(MUInt15 
     }
     else
     {
-        MUInt15 rOffset = (sectorCumulative[0] << 5);
-        MUInt15 gOffset = (sectorCumulative[1] << 1);
-        MUInt15 bOffset = ParallelMath::RightShift(sectorCumulative[2], 3);
+        rOffset = (sectorCumulative[0] << 5);
+        gOffset = (sectorCumulative[1] << 1);
+        bOffset = ParallelMath::RightShift(sectorCumulative[2], 3);
 
         for (int ch = 0; ch < 3; ch++)
             quantizedBase[ch] = ParallelMath::RightShift(sectorCumulative[ch], 7);
