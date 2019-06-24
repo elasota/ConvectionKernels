@@ -15,7 +15,7 @@ Compressed texture format support:
  * ETC1: Complete
  * ETC2 RGB: Complete
  * ETC2 RGBA: Complete
- * ETC2 with punchthrough alpha: Not supported
+ * ETC2 with punchthrough alpha: Complete
  * 11-bit EAC: Not supported
  * PVRTC: Not supported
  * ASTC: Not supported
