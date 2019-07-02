@@ -639,7 +639,7 @@ void cvtt::Internal::ETCComputer::EncodeTMode(uint8_t *outputBuffer, MFloat &bes
             for (int ch = 0; ch < 3; ch++)
                 lineColor[ch] = (blockBestLineColor >> (ch * 5)) & 15;
 
-            EmitTModeBlock(outputBuffer + block * 8, lineColor, blockIsolatedAverageQuantized, blockBestSelectors, blockBestTable, false);
+            EmitTModeBlock(outputBuffer + block * 8, lineColor, blockIsolatedAverageQuantized, blockBestSelectors, blockBestTable, true);
         }
     }
 }
@@ -869,6 +869,9 @@ void cvtt::Internal::ETCComputer::EncodeHMode(uint8_t *outputBuffer, MFloat &bes
     {
         for (int block = 0; block < ParallelMath::ParallelSize; block++)
         {
+            if (!ParallelMath::Extract(bestIsThisMode, block))
+                continue;
+
             ParallelMath::ScalarUInt16 blockBestColors[2] = { ParallelMath::Extract(bestColors[0], block), ParallelMath::Extract(bestColors[1], block) };
             ParallelMath::ScalarUInt16 blockBestSectorBits = ParallelMath::Extract(bestSectorBits, block);
             ParallelMath::ScalarUInt16 blockBestSignBits = ParallelMath::Extract(bestSignBits, block);
@@ -1685,6 +1688,8 @@ void cvtt::Internal::ETCComputer::CompressETC2Block(uint8_t *outputBuffer, const
     {
         for (int px = 0; px < 16; px++)
             pixelIsTransparent[px] = ParallelMath::MakeBoolInt16(false);
+
+        allTransparent = anyTransparent = ParallelMath::MakeBoolInt16(false);
     }
 
     MFloat bestError = ParallelMath::MakeFloat(FLT_MAX);
