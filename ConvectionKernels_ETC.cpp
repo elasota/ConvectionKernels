@@ -1828,14 +1828,20 @@ void cvtt::Internal::ETCComputer::CompressETC2Block(uint8_t *outputBuffer, const
 void cvtt::Internal::ETCComputer::CompressETC2AlphaBlock(uint8_t *outputBuffer, const PixelBlockU8 *pixelBlocks, const Options &options)
 {
     MUInt15 pixels[16];
-    MUInt15 minAlpha = ParallelMath::MakeUInt15(255);
-    MUInt15 maxAlpha = ParallelMath::MakeUInt15(0);
 
     for (int px = 0; px < 16; px++)
     {
         for (int block = 0; block < ParallelMath::ParallelSize; block++)
             ParallelMath::PutUInt15(pixels[px], block, pixelBlocks[block].m_pixels[px][3]);
     }
+
+    CompressETC2AlphaBlockInternal(outputBuffer, pixels, false, false, options);
+}
+
+void cvtt::Internal::ETCComputer::CompressETC2AlphaBlockInternal(uint8_t *outputBuffer, const MUInt15 pixels[16], bool is11Bit, bool isSigned, const Options &options)
+{
+    MUInt15 minAlpha = ParallelMath::MakeUInt15(is11Bit ? 2047 : 255);
+    MUInt15 maxAlpha = ParallelMath::MakeUInt15(0);
 
     for (int px = 0; px < 16; px++)
     {
@@ -1880,13 +1886,34 @@ void cvtt::Internal::ETCComputer::CompressETC2AlphaBlock(uint8_t *outputBuffer, 
                 ParallelMath::PutUInt15(minMultiplier, block, lowMultiplier);
             }
 
-            // We cap at 1 and 14 so both multipliers are valid and dividable
-            // Cases where offset span is 0 should be caught by multiplier 1 of table 13
-            minMultiplier = ParallelMath::Max(ParallelMath::Min(minMultiplier, ParallelMath::MakeUInt15(14)), ParallelMath::MakeUInt15(1));
+            if (is11Bit)
+            {
+                // Clamps this to valid multipliers under 15 and rounds down to nearest multiple of 8
+                minMultiplier = ParallelMath::Min(minMultiplier, ParallelMath::MakeUInt15(112)) & ParallelMath::MakeUInt15(120);
+            }
+            else
+            {
+                // We cap at 1 and 14 so both multipliers are valid and dividable
+                // Cases where offset span is 0 should be caught by multiplier 1 of table 13
+                minMultiplier = ParallelMath::Max(ParallelMath::Min(minMultiplier, ParallelMath::MakeUInt15(14)), ParallelMath::MakeUInt15(1));
+            }
 
             for (uint16_t multiplierOffset = 0; multiplierOffset < 2; multiplierOffset++)
             {
-                MUInt15 multiplier = ParallelMath::MakeUInt15(multiplierOffset) + minMultiplier;
+                MUInt15 multiplier = minMultiplier;
+
+                if (is11Bit)
+                {
+                    if (multiplierOffset == 1)
+                        multiplier = multiplier + ParallelMath::MakeUInt15(8);
+                    else
+                        multiplier = ParallelMath::Max(multiplier, ParallelMath::MakeUInt15(1));
+                }
+                else
+                {
+                    if (multiplierOffset == 1)
+                        multiplier = multiplier + ParallelMath::MakeUInt15(1);
+                }
 
                 MSInt16 multipliedMinOffset = ParallelMath::CompactMultiply(ParallelMath::LosslessCast<MSInt16>::Cast(multiplier), vminOffset);
                 MUInt15 multipliedMaxOffset = ParallelMath::LosslessCast<MUInt15>::Cast(ParallelMath::CompactMultiply(multiplier, vmaxOffset));
@@ -1894,17 +1921,43 @@ void cvtt::Internal::ETCComputer::CompressETC2AlphaBlock(uint8_t *outputBuffer, 
                 // codeword = (maxOffset + minOffset + minAlpha + maxAlpha) / 2
                 MSInt16 unclampedBaseAlphaTimes2 = ParallelMath::LosslessCast<MSInt16>::Cast(alphaSpanMidpointTimes2) - ParallelMath::LosslessCast<MSInt16>::Cast(multipliedMaxOffset) - multipliedMinOffset;
 
-                MUInt15 clampedBaseAlphaTimes2 = ParallelMath::Min(ParallelMath::LosslessCast<MUInt15>::Cast(ParallelMath::Max(unclampedBaseAlphaTimes2, ParallelMath::MakeSInt16(0))), ParallelMath::MakeUInt15(510));
-                MUInt15 baseAlpha = ParallelMath::RightShift(clampedBaseAlphaTimes2 + ParallelMath::MakeUInt15(1), 1);
+                MUInt15 baseAlpha;
+                if (is11Bit)
+                {
+                    // In unsigned, 4 is added to the unquantized alpha, so compensating for that cancels the 4 we have to add to do rounding.
+                    if (isSigned)
+                        unclampedBaseAlphaTimes2 = unclampedBaseAlphaTimes2 + ParallelMath::MakeSInt16(8);
+
+                    // -128 is illegal for some reason
+                    MSInt16 minBaseAlphaTimes2 = isSigned ? ParallelMath::MakeSInt16(16) : ParallelMath::MakeSInt16(0);
+
+                    MUInt15 clampedBaseAlphaTimes2 = ParallelMath::Min(ParallelMath::LosslessCast<MUInt15>::Cast(ParallelMath::Max(unclampedBaseAlphaTimes2, minBaseAlphaTimes2)), ParallelMath::MakeUInt15(4095));
+                    baseAlpha = ParallelMath::RightShift(clampedBaseAlphaTimes2, 1) & ParallelMath::MakeUInt15(2040);
+
+                    if (!isSigned)
+                        baseAlpha = baseAlpha + ParallelMath::MakeUInt15(4);
+                }
+                else
+                {
+                    MUInt15 clampedBaseAlphaTimes2 = ParallelMath::Min(ParallelMath::LosslessCast<MUInt15>::Cast(ParallelMath::Max(unclampedBaseAlphaTimes2, ParallelMath::MakeSInt16(0))), ParallelMath::MakeUInt15(510));
+                    baseAlpha = ParallelMath::RightShift(clampedBaseAlphaTimes2 + ParallelMath::MakeUInt15(1), 1);
+                }
 
                 MUInt15 indexes[16];
                 MUInt31 totalError = ParallelMath::MakeUInt31(0);
                 for (int px = 0; px < 16; px++)
                 {
                     MUInt15 quantizedValues;
-                    QuantizeETC2Alpha(tableIndex, pixels[px], baseAlpha, multiplier, indexes[px], quantizedValues);
+                    QuantizeETC2Alpha(tableIndex, pixels[px], baseAlpha, multiplier, is11Bit, isSigned, indexes[px], quantizedValues);
 
-                    totalError = totalError + ParallelMath::ToUInt31(ParallelMath::SqDiffUInt8(quantizedValues, pixels[px]));
+                    if (is11Bit)
+                    {
+                        MSInt16 delta = ParallelMath::LosslessCast<MSInt16>::Cast(quantizedValues) - ParallelMath::LosslessCast<MSInt16>::Cast(pixels[px]);
+                        MSInt32 deltaSq = ParallelMath::XMultiply(delta, delta);
+                        totalError = totalError + ParallelMath::LosslessCast<MUInt31>::Cast(deltaSq);
+                    }
+                    else
+                        totalError = totalError + ParallelMath::ToUInt31(ParallelMath::SqDiffUInt8(quantizedValues, pixels[px]));
                 }
 
                 ParallelMath::Int16CompFlag isBetter = ParallelMath::Int32FlagToInt16(ParallelMath::Less(totalError, bestTotalError));
@@ -1924,9 +1977,18 @@ void cvtt::Internal::ETCComputer::CompressETC2AlphaBlock(uint8_t *outputBuffer, 
         }
     }
 
+    if (is11Bit)
+    {
+        bestMultiplier = ParallelMath::RightShift(bestMultiplier, 3);
+
+        if (isSigned)
+            bestBaseCodeword = bestBaseCodeword ^ ParallelMath::MakeUInt15(0x80);
+    }
+
     for (int block = 0; block < ParallelMath::ParallelSize; block++)
     {
         uint8_t *output = outputBuffer + block * 8;
+
         output[0] = static_cast<uint8_t>(ParallelMath::Extract(bestBaseCodeword, block));
 
         ParallelMath::ScalarUInt16 multiplier = ParallelMath::Extract(bestMultiplier, block);
@@ -1959,6 +2021,35 @@ void cvtt::Internal::ETCComputer::CompressETC2AlphaBlock(uint8_t *outputBuffer, 
 
         assert(outputOffset == 8 && numOutputBits == 0);
     }
+}
+
+void cvtt::Internal::ETCComputer::CompressEACBlock(uint8_t *outputBuffer, const PixelBlockScalarS16 *inputBlocks, bool isSigned, const Options &options)
+{
+    MUInt15 pixels[16];
+    for (int px = 0; px < 16; px++)
+    {
+        MSInt16 adjustedPixel;
+        for (int block = 0; block < ParallelMath::ParallelSize; block++)
+            ParallelMath::PutSInt16(adjustedPixel, block, inputBlocks[block].m_pixels[px]);
+
+        // We use a slightly shifted range here so we can keep the unquantized base color in a UInt15
+        // That is, signed range is 1..2047, and unsigned range is 0..2047
+        if (isSigned)
+        {
+            adjustedPixel = ParallelMath::Min(adjustedPixel, ParallelMath::MakeSInt16(1023)) + ParallelMath::MakeSInt16(1024);
+            adjustedPixel = ParallelMath::Max(ParallelMath::MakeSInt16(1), adjustedPixel);
+        }
+        else
+        {
+            adjustedPixel = ParallelMath::Min(adjustedPixel, ParallelMath::MakeSInt16(2047));
+            adjustedPixel = ParallelMath::Max(ParallelMath::MakeSInt16(0), adjustedPixel);
+        }
+
+
+        pixels[px] = ParallelMath::LosslessCast<MUInt15>::Cast(adjustedPixel);
+    }
+
+    CompressETC2AlphaBlockInternal(outputBuffer, pixels, true, isSigned, options);
 }
 
 void cvtt::Internal::ETCComputer::CompressETC1Block(uint8_t *outputBuffer, const PixelBlockU8 *inputBlocks, ETC1CompressionData *compressionData, const Options &options)
@@ -2207,7 +2298,7 @@ void cvtt::Internal::ETCComputer::ConvertFromFakeBT709(MFloat rgb[3], const MFlo
 }
 
 
-void cvtt::Internal::ETCComputer::QuantizeETC2Alpha(int tableIndex, const MUInt15& value, const MUInt15& baseValue, const MUInt15& multiplier, MUInt15& outIndexes, MUInt15& outQuantizedValues)
+void cvtt::Internal::ETCComputer::QuantizeETC2Alpha(int tableIndex, const MUInt15& value, const MUInt15& baseValue, const MUInt15& multiplier, bool is11Bit, bool isSigned, MUInt15& outIndexes, MUInt15& outQuantizedValues)
 {
     MSInt16 offset = ParallelMath::LosslessCast<MSInt16>::Cast(value) - ParallelMath::LosslessCast<MSInt16>::Cast(baseValue);
     MSInt16 offsetTimes2 = offset + offset;
@@ -2239,7 +2330,15 @@ void cvtt::Internal::ETCComputer::QuantizeETC2Alpha(int tableIndex, const MUInt1
 
     MSInt16 offsetValue = ParallelMath::LosslessCast<MSInt16>::Cast(baseValue) + quantizedOffset;
 
-    outQuantizedValues = ParallelMath::Min(ParallelMath::MakeUInt15(255), ParallelMath::LosslessCast<MUInt15>::Cast(ParallelMath::Max(ParallelMath::MakeSInt16(0), offsetValue)));
+    if (is11Bit)
+    {
+        if (isSigned)
+            outQuantizedValues = ParallelMath::Min(ParallelMath::MakeUInt15(2047), ParallelMath::LosslessCast<MUInt15>::Cast(ParallelMath::Max(ParallelMath::MakeSInt16(1), offsetValue)));
+        else
+            outQuantizedValues = ParallelMath::Min(ParallelMath::MakeUInt15(2047), ParallelMath::LosslessCast<MUInt15>::Cast(ParallelMath::Max(ParallelMath::MakeSInt16(0), offsetValue)));
+    }
+    else
+        outQuantizedValues = ParallelMath::Min(ParallelMath::MakeUInt15(255), ParallelMath::LosslessCast<MUInt15>::Cast(ParallelMath::Max(ParallelMath::MakeSInt16(0), offsetValue)));
 
     MUInt15 indexSub = ParallelMath::LosslessCast<MUInt15>::Cast(signBits) & ParallelMath::MakeUInt15(4);
 
@@ -2914,6 +3013,7 @@ void cvtt::Internal::ETCComputer::CompressETC1PunchthroughBlockInternal(MFloat &
         EmitETC1Block(outputBuffer + block * 8, ParallelMath::Extract(bestFlip, block), 1, blockBestColors, blockBestTables, blockBestSelectors, true);
     }
 }
+
 
 cvtt::ETC1CompressionData *cvtt::Internal::ETCComputer::AllocETC1Data(cvtt::Kernels::allocFunc_t allocFunc, void *context)
 {

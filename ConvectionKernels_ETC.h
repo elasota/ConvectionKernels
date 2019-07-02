@@ -17,6 +17,7 @@ namespace cvtt
             static void CompressETC1Block(uint8_t *outputBuffer, const PixelBlockU8 *inputBlocks, ETC1CompressionData *compressionData, const Options &options);
             static void CompressETC2Block(uint8_t *outputBuffer, const PixelBlockU8 *inputBlocks, ETC2CompressionData *compressionData, const Options &options, bool punchthroughAlpha);
             static void CompressETC2AlphaBlock(uint8_t *outputBuffer, const PixelBlockU8 *inputBlocks, const Options &options);
+            static void CompressEACBlock(uint8_t *outputBuffer, const PixelBlockScalarS16 *inputBlocks, bool isSigned, const Options &options);
 
             static ETC2CompressionData *AllocETC2Data(cvtt::Kernels::allocFunc_t allocFunc, void *context);
             static void ReleaseETC2Data(ETC2CompressionData *compressionData, cvtt::Kernels::freeFunc_t freeFunc);
@@ -100,6 +101,7 @@ namespace cvtt
 
             static void CompressETC1BlockInternal(MFloat &bestTotalError, uint8_t *outputBuffer, const MUInt15 pixels[16][3], const MFloat preWeightedPixels[16][3], DifferentialResolveStorage& compressionData, const Options &options, bool punchthrough);
             static void CompressETC1PunchthroughBlockInternal(MFloat &bestTotalError, uint8_t *outputBuffer, const MUInt15 pixels[16][3], const MFloat preWeightedPixels[16][3], const ParallelMath::Int16CompFlag isTransparent[16], DifferentialResolveStorage& compressionData, const Options &options);
+            static void CompressETC2AlphaBlockInternal(uint8_t *outputBuffer, const MUInt15 pixels[16], bool is11Bit, bool isSigned, const Options &options);
 
             static void ExtractBlocks(MUInt15 pixels[16][3], MFloat preWeightedPixels[16][3], const PixelBlockU8 *inputBlocks, const Options &options);
 
@@ -111,7 +113,7 @@ namespace cvtt
             static void ConvertToFakeBT709(MFloat yuv[3], const MFloat &r, const MFloat &g, const MFloat &b);
             static void ConvertFromFakeBT709(MFloat rgb[3], const MFloat yuv[3]);
 
-            static void QuantizeETC2Alpha(int tableIndex, const MUInt15& value, const MUInt15& baseValue, const MUInt15& multiplier, MUInt15& outIndexes, MUInt15& outQuantizedValues);
+            static void QuantizeETC2Alpha(int tableIndex, const MUInt15& value, const MUInt15& baseValue, const MUInt15& multiplier, bool is11Bit, bool isSigned, MUInt15& outIndexes, MUInt15& outQuantizedValues);
 
             static void EmitTModeBlock(uint8_t *outputBuffer, const ParallelMath::ScalarUInt16 lineColor[3], const ParallelMath::ScalarUInt16 isolatedColor[3], int32_t packedSelectors, ParallelMath::ScalarUInt16 table, bool opaque);
             static void EmitHModeBlock(uint8_t *outputBuffer, const ParallelMath::ScalarUInt16 blockColors[2], ParallelMath::ScalarUInt16 sectorBits, ParallelMath::ScalarUInt16 signBits, ParallelMath::ScalarUInt16 table, bool opaque);
