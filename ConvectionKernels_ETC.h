@@ -19,7 +19,7 @@ namespace cvtt
             static void CompressETC2AlphaBlock(uint8_t *outputBuffer, const PixelBlockU8 *inputBlocks, const Options &options);
             static void CompressEACBlock(uint8_t *outputBuffer, const PixelBlockScalarS16 *inputBlocks, bool isSigned, const Options &options);
 
-            static ETC2CompressionData *AllocETC2Data(cvtt::Kernels::allocFunc_t allocFunc, void *context);
+            static ETC2CompressionData *AllocETC2Data(cvtt::Kernels::allocFunc_t allocFunc, void *context, const cvtt::Options &options);
             static void ReleaseETC2Data(ETC2CompressionData *compressionData, cvtt::Kernels::freeFunc_t freeFunc);
 
             static ETC1CompressionData *AllocETC1Data(cvtt::Kernels::allocFunc_t allocFunc, void *context);
@@ -67,15 +67,14 @@ namespace cvtt
 
             struct ETC2CompressionDataInternal : public cvtt::ETC2CompressionData
             {
-                explicit ETC2CompressionDataInternal(void *context)
-                    : m_context(context)
-                {
-                }
+                explicit ETC2CompressionDataInternal(void *context, const cvtt::Options &options);
 
                 HModeEval m_h;
                 DifferentialResolveStorage m_drs;
 
                 void *m_context;
+                float m_chromaSideAxis0[3];
+                float m_chromaSideAxis1[3];
             };
 
             static MFloat ComputeErrorUniform(const MUInt15 pixelA[3], const MUInt15 pixelB[3]);

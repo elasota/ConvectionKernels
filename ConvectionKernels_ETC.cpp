@@ -1635,26 +1635,26 @@ void cvtt::Internal::ETCComputer::EncodePlanar(uint8_t *outputBuffer, MFloat &be
                 highBits |= 7 << (45 - 32);
             }
 
-highBits |= ro << (57 - 32);
-highBits |= go1 << (56 - 32);
-highBits |= go2 << (49 - 32);
-highBits |= bo1 << (48 - 32);
-highBits |= bo2 << (43 - 32);
-highBits |= bo3 << (39 - 32);
-highBits |= rh1 << (34 - 32);
-highBits |= 1 << (33 - 32);
-highBits |= rh2 << (32 - 32);
+            highBits |= ro << (57 - 32);
+            highBits |= go1 << (56 - 32);
+            highBits |= go2 << (49 - 32);
+            highBits |= bo1 << (48 - 32);
+            highBits |= bo2 << (43 - 32);
+            highBits |= bo3 << (39 - 32);
+            highBits |= rh1 << (34 - 32);
+            highBits |= 1 << (33 - 32);
+            highBits |= rh2 << (32 - 32);
 
-lowBits |= gh << 25;
-lowBits |= bh << 19;
-lowBits |= rv << 13;
-lowBits |= gv << 6;
-lowBits |= bv << 0;
+            lowBits |= gh << 25;
+            lowBits |= bh << 19;
+            lowBits |= rv << 13;
+            lowBits |= gv << 6;
+            lowBits |= bv << 0;
 
-for (int i = 0; i < 4; i++)
-    outputBuffer[block * 8 + i] = (highBits >> (24 - i * 8)) & 0xff;
-for (int i = 0; i < 4; i++)
-    outputBuffer[block * 8 + i + 4] = (lowBits >> (24 - i * 8)) & 0xff;
+            for (int i = 0; i < 4; i++)
+                outputBuffer[block * 8 + i] = (highBits >> (24 - i * 8)) & 0xff;
+            for (int i = 0; i < 4; i++)
+                outputBuffer[block * 8 + i + 4] = (lowBits >> (24 - i * 8)) & 0xff;
         }
     }
 }
@@ -1718,46 +1718,100 @@ void cvtt::Internal::ETCComputer::CompressETC2Block(uint8_t *outputBuffer, const
     if (!ParallelMath::AllSet(allTransparent))
         EncodePlanar(outputBuffer, bestError, pixels, preWeightedPixels, options);
 
-    MSInt16 chromaCoordinates3[16][2];
-    for (int px = 0; px < 16; px++)
-    {
-        chromaCoordinates3[px][0] = ParallelMath::LosslessCast<MSInt16>::Cast(pixels[px][0]) - ParallelMath::LosslessCast<MSInt16>::Cast(pixels[px][2]);
-        chromaCoordinates3[px][1] = ParallelMath::LosslessCast<MSInt16>::Cast(pixels[px][0]) - ParallelMath::LosslessCast<MSInt16>::Cast(pixels[px][1] << 1) + ParallelMath::LosslessCast<MSInt16>::Cast(pixels[px][2]);
-    }
-
-    MSInt16 chromaCoordinateCentroid[2] = { ParallelMath::MakeSInt16(0), ParallelMath::MakeSInt16(0) };
-    for (int px = 0; px < 16; px++)
-    {
-        for (int ch = 0; ch < 2; ch++)
-            chromaCoordinateCentroid[ch] = chromaCoordinateCentroid[ch] + chromaCoordinates3[px][ch];
-    }
+    MFloat chromaDelta[16][2];
 
     MUInt15 numOpaque = ParallelMath::MakeUInt15(16);
     for (int px = 0; px < 16; px++)
         numOpaque = numOpaque - ParallelMath::SelectOrZero(pixelIsTransparent[px], ParallelMath::MakeUInt15(1));
 
-    MSInt16 chromaDelta[16][2];
-    if (punchthroughAlpha)
+    if (options.flags & cvtt::Flags::Uniform)
     {
+        MSInt16 chromaCoordinates3[16][2];
+        for (int px = 0; px < 16; px++)
+        {
+            chromaCoordinates3[px][0] = ParallelMath::LosslessCast<MSInt16>::Cast(pixels[px][0]) - ParallelMath::LosslessCast<MSInt16>::Cast(pixels[px][2]);
+            chromaCoordinates3[px][1] = ParallelMath::LosslessCast<MSInt16>::Cast(pixels[px][0]) - ParallelMath::LosslessCast<MSInt16>::Cast(pixels[px][1] << 1) + ParallelMath::LosslessCast<MSInt16>::Cast(pixels[px][2]);
+        }
+
+        MSInt16 chromaCoordinateCentroid[2] = { ParallelMath::MakeSInt16(0), ParallelMath::MakeSInt16(0) };
         for (int px = 0; px < 16; px++)
         {
             for (int ch = 0; ch < 2; ch++)
+                chromaCoordinateCentroid[ch] = chromaCoordinateCentroid[ch] + chromaCoordinates3[px][ch];
+        }
+
+        if (punchthroughAlpha)
+        {
+            for (int px = 0; px < 16; px++)
             {
-                MUInt15 chromaCoordinateMultiplied = ParallelMath::LosslessCast<MUInt15>::Cast(ParallelMath::CompactMultiply(chromaCoordinates3[px][ch], numOpaque));
-                chromaDelta[px][ch] = ParallelMath::LosslessCast<MSInt16>::Cast(chromaCoordinateMultiplied) - chromaCoordinateCentroid[ch];
+                for (int ch = 0; ch < 2; ch++)
+                {
+                    MUInt15 chromaCoordinateMultiplied = ParallelMath::LosslessCast<MUInt15>::Cast(ParallelMath::CompactMultiply(chromaCoordinates3[px][ch], numOpaque));
+                    MSInt16 delta = ParallelMath::LosslessCast<MSInt16>::Cast(chromaCoordinateMultiplied) - chromaCoordinateCentroid[ch];
+                    chromaDelta[px][ch] = ParallelMath::ToFloat(delta);
+                }
             }
         }
+        else
+        {
+            for (int px = 0; px < 16; px++)
+            {
+                for (int ch = 0; ch < 2; ch++)
+                    chromaDelta[px][ch] = ParallelMath::ToFloat((chromaCoordinates3[px][ch] << 4) - chromaCoordinateCentroid[ch]);
+            }
+        }
+
+        const MFloat rcpSqrt3 = ParallelMath::MakeFloat(0.57735026918962576450914878050196f);
+
+        for (int px = 0; px < 16; px++)
+            chromaDelta[px][1] = chromaDelta[px][1] * rcpSqrt3;
     }
     else
     {
+        const float chromaAxis0[3] = { internalData->m_chromaSideAxis0[0], internalData->m_chromaSideAxis0[1], internalData->m_chromaSideAxis0[2] };
+        const float chromaAxis1[3] = { internalData->m_chromaSideAxis1[0], internalData->m_chromaSideAxis1[1], internalData->m_chromaSideAxis1[2] };
+
+        MFloat chromaCoordinates3[16][2];
+        for (int px = 0; px < 16; px++)
+        {
+            const MFloat &px0 = preWeightedPixels[px][0];
+            const MFloat &px1 = preWeightedPixels[px][1];
+            const MFloat &px2 = preWeightedPixels[px][2];
+
+            chromaCoordinates3[px][0] = px0 * chromaAxis0[0] + px1 * chromaAxis0[1] + px2 * chromaAxis0[2];
+            chromaCoordinates3[px][1] = px0 * chromaAxis1[0] + px1 * chromaAxis1[1] + px2 * chromaAxis1[2];
+        }
+
+        MFloat chromaCoordinateCentroid[2] = { ParallelMath::MakeFloatZero(), ParallelMath::MakeFloatZero() };
         for (int px = 0; px < 16; px++)
         {
             for (int ch = 0; ch < 2; ch++)
-                chromaDelta[px][ch] = (chromaCoordinates3[px][ch] << 4) - chromaCoordinateCentroid[ch];
+                chromaCoordinateCentroid[ch] = chromaCoordinateCentroid[ch] + chromaCoordinates3[px][ch];
+        }
+
+        if (punchthroughAlpha)
+        {
+            const MFloat numOpaqueF = ParallelMath::ToFloat(numOpaque);
+            for (int px = 0; px < 16; px++)
+            {
+                for (int ch = 0; ch < 2; ch++)
+                {
+                    MFloat chromaCoordinateMultiplied = chromaCoordinates3[px][ch] * numOpaqueF;
+                    MFloat delta = chromaCoordinateMultiplied - chromaCoordinateCentroid[ch];
+                    chromaDelta[px][ch] = delta;
+                }
+            }
+        }
+        else
+        {
+            for (int px = 0; px < 16; px++)
+            {
+                for (int ch = 0; ch < 2; ch++)
+                    chromaDelta[px][ch] = chromaCoordinates3[px][ch] * 16.0f - chromaCoordinateCentroid[ch];
+            }
         }
     }
 
-    const MFloat rcpSqrt3 = ParallelMath::MakeFloat(0.57735026918962576450914878050196f);
 
     MFloat covXX = ParallelMath::MakeFloatZero();
     MFloat covYY = ParallelMath::MakeFloatZero();
@@ -1765,8 +1819,8 @@ void cvtt::Internal::ETCComputer::CompressETC2Block(uint8_t *outputBuffer, const
 
     for (int px = 0; px < 16; px++)
     {
-        MFloat nx = ParallelMath::ToFloat(chromaDelta[px][0]);
-        MFloat ny = ParallelMath::ToFloat(chromaDelta[px][1]) * rcpSqrt3;
+        MFloat nx = chromaDelta[px][0];
+        MFloat ny = chromaDelta[px][1];
 
         covXX = covXX + nx * nx;
         covYY = covYY + ny * ny;
@@ -1789,7 +1843,7 @@ void cvtt::Internal::ETCComputer::CompressETC2Block(uint8_t *outputBuffer, const
 
     ParallelMath::Int16CompFlag sectorAssignments[16];
     for (int px = 0; px < 16; px++)
-        sectorAssignments[px] = ParallelMath::FloatFlagToInt16(ParallelMath::Less(ParallelMath::ToFloat(chromaDelta[px][0]) * dx + ParallelMath::ToFloat(chromaDelta[px][1]) * dy * rcpSqrt3, ParallelMath::MakeFloatZero()));
+        sectorAssignments[px] = ParallelMath::FloatFlagToInt16(ParallelMath::Less(chromaDelta[px][0] * dx + chromaDelta[px][1] * dy, ParallelMath::MakeFloatZero()));
 
     if (!ParallelMath::AllSet(allTransparent))
     {
@@ -3037,12 +3091,12 @@ void cvtt::Internal::ETCComputer::ReleaseETC1Data(ETC1CompressionData *compressi
     freeFunc(context, compressionData, sizeof(cvtt::Internal::ETCComputer::ETC1CompressionDataInternal));
 }
 
-cvtt::ETC2CompressionData *cvtt::Internal::ETCComputer::AllocETC2Data(cvtt::Kernels::allocFunc_t allocFunc, void *context)
+cvtt::ETC2CompressionData *cvtt::Internal::ETCComputer::AllocETC2Data(cvtt::Kernels::allocFunc_t allocFunc, void *context, const cvtt::Options &options)
 {
     void *buffer = allocFunc(context, sizeof(cvtt::Internal::ETCComputer::ETC2CompressionDataInternal));
     if (!buffer)
         return NULL;
-    new (buffer) cvtt::Internal::ETCComputer::ETC2CompressionDataInternal(context);
+    new (buffer) cvtt::Internal::ETCComputer::ETC2CompressionDataInternal(context, options);
     return static_cast<ETC2CompressionData*>(buffer);
 }
 
@@ -3052,6 +3106,36 @@ void cvtt::Internal::ETCComputer::ReleaseETC2Data(ETC2CompressionData *compressi
     void *context = internalData->m_context;
     internalData->~ETC2CompressionDataInternal();
     freeFunc(context, compressionData, sizeof(cvtt::Internal::ETCComputer::ETC2CompressionDataInternal));
+}
+
+cvtt::Internal::ETCComputer::ETC2CompressionDataInternal::ETC2CompressionDataInternal(void *context, const cvtt::Options &options)
+    : m_context(context)
+{
+    const float cd[3] = { options.redWeight, options.greenWeight, options.blueWeight };
+    const float rotCD[3] = { cd[1], cd[2], cd[0] };
+
+    const float offs = -(rotCD[0] * cd[0] + rotCD[1] * cd[1] + rotCD[2] * cd[2]) / (cd[0] * cd[0] + cd[1] * cd[1] + cd[2] * cd[2]);
+
+    const float chromaAxis0[3] = { rotCD[0] + cd[0] * offs, rotCD[1] + cd[1] * offs, rotCD[2] + cd[2] * offs };
+
+    const float chromaAxis1Unnormalized[3] =
+    {
+        chromaAxis0[1] * cd[2] - chromaAxis0[2] * cd[1],
+        chromaAxis0[2] * cd[0] - chromaAxis0[0] * cd[2],
+        chromaAxis0[0] * cd[1] - chromaAxis0[1] * cd[0]
+    };
+
+    const float ca0LengthSq = (chromaAxis0[0] * chromaAxis0[0] + chromaAxis0[1] * chromaAxis0[1] + chromaAxis0[2] * chromaAxis0[2]);
+    const float ca1UNLengthSq = (chromaAxis1Unnormalized[0] * chromaAxis1Unnormalized[0] + chromaAxis1Unnormalized[1] * chromaAxis1Unnormalized[1] + chromaAxis1Unnormalized[2] * chromaAxis1Unnormalized[2]);
+    const float lengthRatio = static_cast<float>(std::sqrt(ca0LengthSq / ca1UNLengthSq));
+
+    const float chromaAxis1[3] = { chromaAxis1Unnormalized[0] * lengthRatio, chromaAxis1Unnormalized[1] * lengthRatio, chromaAxis1Unnormalized[2] * lengthRatio };
+
+    for (int i = 0; i < 3; i++)
+    {
+        m_chromaSideAxis0[i] = chromaAxis0[i];
+        m_chromaSideAxis1[i] = chromaAxis1[i];
+    }
 }
 
 #endif

@@ -123,6 +123,11 @@ namespace cvtt
         int8_t m_pixels[16][4];
     };
 
+    struct PixelBlockScalarS16
+    {
+        int16_t m_pixels[16];
+    };
+
     // RGBA input block for half-precision float formats (bit-cast to int16_t)
     struct PixelBlockF16
     {
@@ -160,12 +165,14 @@ namespace cvtt
         void EncodeETC1(uint8_t *pBC, const PixelBlockU8 *pBlocks, const Options &options, ETC1CompressionData *compressionData);
         void EncodeETC2(uint8_t *pBC, const PixelBlockU8 *pBlocks, const Options &options, ETC2CompressionData *compressionData);
         void EncodeETC2RGBA(uint8_t *pBC, const PixelBlockU8 *pBlocks, const cvtt::Options &options, cvtt::ETC2CompressionData *compressionData);
-        void EncodeETC2Alpha(uint8_t *pBC, const PixelBlockU8 *pBlocks, const cvtt::Options &options);
         void EncodeETC2PunchthroughAlpha(uint8_t *pBC, const PixelBlockU8 *pBlocks, const cvtt::Options &options, cvtt::ETC2CompressionData *compressionData);
+
+        void EncodeETC2Alpha(uint8_t *pBC, const PixelBlockU8 *pBlocks, const cvtt::Options &options);
+        void EncodeETC2Alpha11(uint8_t *pBC, const PixelBlockScalarS16 *pBlocks, bool isSigned, const cvtt::Options &options);
 
         // ETC compression requires temporary storage that normally consumes a large amount of stack space.
         // To allocate and release it, use one of these functions.
-        ETC2CompressionData *AllocETC2Data(allocFunc_t allocFunc, void *context);
+        ETC2CompressionData *AllocETC2Data(allocFunc_t allocFunc, void *context, const cvtt::Options &options);
         void ReleaseETC2Data(ETC2CompressionData *compressionData, freeFunc_t freeFunc);
 
         ETC1CompressionData *AllocETC1Data(allocFunc_t allocFunc, void *context);

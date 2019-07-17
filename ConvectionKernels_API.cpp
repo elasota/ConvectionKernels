@@ -248,12 +248,21 @@ namespace cvtt
             assert(pBlocks);
             assert(pBC);
 
-            float channelWeights[4];
-            Util::FillWeights(options, channelWeights);
-
             for (size_t blockBase = 0; blockBase < cvtt::NumParallelBlocks; blockBase += ParallelMath::ParallelSize)
             {
                 Internal::ETCComputer::CompressETC2AlphaBlock(pBC, pBlocks + blockBase, options);
+                pBC += ParallelMath::ParallelSize * 8;
+            }
+        }
+
+        void EncodeETC2Alpha11(uint8_t *pBC, const PixelBlockScalarS16 *pBlocks, bool isSigned, const cvtt::Options &options)
+        {
+            assert(pBlocks);
+            assert(pBC);
+
+            for (size_t blockBase = 0; blockBase < cvtt::NumParallelBlocks; blockBase += ParallelMath::ParallelSize)
+            {
+                Internal::ETCComputer::CompressEACBlock(pBC, pBlocks + blockBase, isSigned, options);
                 pBC += ParallelMath::ParallelSize * 8;
             }
         }
@@ -322,9 +331,9 @@ namespace cvtt
             cvtt::Internal::ETCComputer::ReleaseETC1Data(compressionData, freeFunc);
         }
 
-        ETC2CompressionData *AllocETC2Data(allocFunc_t allocFunc, void *context)
+        ETC2CompressionData *AllocETC2Data(allocFunc_t allocFunc, void *context, const cvtt::Options &options)
         {
-            return cvtt::Internal::ETCComputer::AllocETC2Data(allocFunc, context);
+            return cvtt::Internal::ETCComputer::AllocETC2Data(allocFunc, context, options);
         }
 
         void ReleaseETC2Data(ETC2CompressionData *compressionData, freeFunc_t freeFunc)
