@@ -1527,6 +1527,12 @@ namespace cvtt
             return v;
         }
 
+        static bool Extract(bool v, int offset)
+        {
+            UNREFERENCED_PARAMETER(offset);
+            return v;
+        }
+
         static float Extract(float v, int offset)
         {
             UNREFERENCED_PARAMETER(offset);
