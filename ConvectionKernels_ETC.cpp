@@ -2240,25 +2240,29 @@ void cvtt::Internal::ETCComputer::ResolveHalfBlockFakeBT709RoundingFast(MUInt15 
     MUInt15 quantizedBase[3];
     MUInt15 upperBound;
 
+    MUInt15 sectorCumulativeFillIn[3];
+    for (int ch = 0; ch < 3; ch++)
+        sectorCumulativeFillIn[ch] = sectorCumulative[ch] + ParallelMath::RightShift(sectorCumulative[ch], 8);
+
     if (isDifferential)
     {
-        rOffset = (sectorCumulative[0] << 6);
-        gOffset = (sectorCumulative[1] << 2);
-        bOffset = ParallelMath::RightShift(sectorCumulative[2], 2);
+        rOffset = (sectorCumulativeFillIn[0] << 6) & ParallelMath::MakeUInt15(0xf00);
+        gOffset = (sectorCumulativeFillIn[1] << 4) & ParallelMath::MakeUInt15(0x0f0);
+        bOffset = ParallelMath::RightShift(sectorCumulativeFillIn[2], 2) & ParallelMath::MakeUInt15(0x00f);
 
         for (int ch = 0; ch < 3; ch++)
-            quantizedBase[ch] = ParallelMath::RightShift(sectorCumulative[ch], 6);
+            quantizedBase[ch] = ParallelMath::RightShift(sectorCumulativeFillIn[ch], 6);
 
         upperBound = ParallelMath::MakeUInt15(31);
     }
     else
     {
-        rOffset = (sectorCumulative[0] << 5);
-        gOffset = (sectorCumulative[1] << 1);
-        bOffset = ParallelMath::RightShift(sectorCumulative[2], 3);
+        rOffset = (sectorCumulativeFillIn[0] << 5) & ParallelMath::MakeUInt15(0xf00);
+        gOffset = (sectorCumulativeFillIn[1] << 1) & ParallelMath::MakeUInt15(0x0f0);
+        bOffset = ParallelMath::RightShift(sectorCumulativeFillIn[2], 3) & ParallelMath::MakeUInt15(0x00f);
 
         for (int ch = 0; ch < 3; ch++)
-            quantizedBase[ch] = ParallelMath::RightShift(sectorCumulative[ch], 7);
+            quantizedBase[ch] = ParallelMath::RightShift(sectorCumulativeFillIn[ch], 7);
 
         upperBound = ParallelMath::MakeUInt15(15);
     }
@@ -2465,9 +2469,9 @@ void cvtt::Internal::ETCComputer::EmitHModeBlock(uint8_t *outputBuffer, const Pa
         ParallelMath::ScalarUInt16 lineColor[3];
         ParallelMath::ScalarUInt16 isolatedColor[3];
 
-        lineColor[0] = isolatedColor[0] = (blockColors[0] >> 8) & 0xf;
-        lineColor[1] = isolatedColor[1] = (blockColors[1] >> 4) & 0xf;
-        lineColor[2] = isolatedColor[2] = (blockColors[2] >> 0) & 0xf;
+        lineColor[0] = isolatedColor[0] = (blockColors[0] >> 10) & 0x1f;
+        lineColor[1] = isolatedColor[1] = (blockColors[0] >> 5) & 0x1f;
+        lineColor[2] = isolatedColor[2] = (blockColors[0] >> 0) & 0x1f;
 
         int32_t packedSelectors = 0x55555555;
         for (int px = 0; px < 16; px++)
