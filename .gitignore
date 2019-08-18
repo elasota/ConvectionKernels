@@ -17,6 +17,8 @@
 *.ilk
 *.VC.db
 *.nupkg
+*.obj
+*.idb
 .vs
 /Bin
 /ipch
