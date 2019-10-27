@@ -1981,7 +1981,7 @@ void cvtt::Internal::BC7Computer::TryDualPlane(uint32_t flags, const MUInt15 pix
                             if (flags & Flags::BC7_FastIndexing)
                             {
                                 errorRGB = rgbAggError.Finalize(flags, rotatedRGBWeightsSq);
-                                errorA = rgbAggError.Finalize(flags, rotatedAlphaWeightSq);
+                                errorA = alphaAggError.Finalize(flags, rotatedAlphaWeightSq);
                             }
 
                             rgbIndexes[px] = rgbIndex;
