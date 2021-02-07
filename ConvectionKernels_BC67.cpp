@@ -960,36 +960,26 @@ void cvtt::Internal::BC7Computer::TweakAlpha(const MUInt15 original[2], int twea
     result[1] = ParallelMath::RoundAndConvertToU15(ParallelMath::Clamp(base + offs * tf[1], 0.0f, 255.0f), &roundingMode);
 }
 
-void cvtt::Internal::BC7Computer::Quantize(MUInt15* color, int bits, int channels, const ParallelMath::RoundTowardNearestForScope *roundingMode)
+void cvtt::Internal::BC7Computer::Quantize(MUInt15* color, int bits, int channels)
 {
-    float maxColor = static_cast<float>((1 << bits) - 1);
-
-    for (int i = 0; i < channels; i++)
-        color[i] = ParallelMath::RoundAndConvertToU15(ParallelMath::Clamp(ParallelMath::ToFloat(color[i]) * ParallelMath::MakeFloat(1.0f / 255.0f) * maxColor, 0.f, 255.f), roundingMode);
+    for (int ch = 0; ch < channels; ch++)
+        color[ch] = ParallelMath::RightShift(((color[ch] << bits) - color[ch]) + ParallelMath::MakeUInt15(127 + (1 << (7 - bits))), 8);
 }
 
-void cvtt::Internal::BC7Computer::QuantizeP(MUInt15* color, int bits, uint16_t p, int channels, const ParallelMath::RoundTowardNearestForScope *roundingMode)
+void cvtt::Internal::BC7Computer::QuantizeP(MUInt15* color, int bits, uint16_t p, int channels)
 {
-    uint16_t pShift = static_cast<uint16_t>(1 << (7 - bits));
-    MUInt15 pShiftV = ParallelMath::MakeUInt15(pShift);
-
-    float maxColorF = static_cast<float>(255 - (1 << (7 - bits)));
-
-    float maxQuantized = static_cast<float>((1 << bits) - 1);
+    int16_t addend;
+    if (p)
+        addend = ((1 << (8 - bits)) - 1);
+    else
+        addend = 255;
 
     for (int ch = 0; ch < channels; ch++)
     {
-        MUInt15 clr = color[ch];
-        if (p)
-            clr = ParallelMath::Max(clr, pShiftV) - pShiftV;
-
-        MFloat rerangedColor = ParallelMath::ToFloat(clr) * maxQuantized / maxColorF;
-
-        clr = ParallelMath::RoundAndConvertToU15(ParallelMath::Clamp(rerangedColor, 0.0f, maxQuantized), roundingMode) << 1;
-        if (p)
-            clr = clr | ParallelMath::MakeUInt15(1);
-
-        color[ch] = clr;
+        MUInt16 ch16 = ParallelMath::LosslessCast<MUInt16>::Cast(color[ch]);
+        ch16 = ParallelMath::RightShift((ch16 << (bits + 1)) - ch16 + addend, 9);
+        ch16 = (ch16 << 1) | ParallelMath::MakeUInt16(p);
+        color[ch] = ParallelMath::LosslessCast<MUInt15>::Cast(ch16);
     }
 }
 
@@ -1003,62 +993,62 @@ void cvtt::Internal::BC7Computer::Unquantize(MUInt15* color, int bits, int chann
     }
 }
 
-void cvtt::Internal::BC7Computer::CompressEndpoints0(MUInt15 ep[2][4], uint16_t p[2], const ParallelMath::RoundTowardNearestForScope *roundingMode)
+void cvtt::Internal::BC7Computer::CompressEndpoints0(MUInt15 ep[2][4], uint16_t p[2])
 {
     for (int j = 0; j < 2; j++)
     {
-        QuantizeP(ep[j], 4, p[j], 3, roundingMode);
+        QuantizeP(ep[j], 4, p[j], 3);
         Unquantize(ep[j], 5, 3);
         ep[j][3] = ParallelMath::MakeUInt15(255);
     }
 }
 
-void cvtt::Internal::BC7Computer::CompressEndpoints1(MUInt15 ep[2][4], uint16_t p, const ParallelMath::RoundTowardNearestForScope *roundingMode)
+void cvtt::Internal::BC7Computer::CompressEndpoints1(MUInt15 ep[2][4], uint16_t p)
 {
     for (int j = 0; j < 2; j++)
     {
-        QuantizeP(ep[j], 6, p, 3, roundingMode);
+        QuantizeP(ep[j], 6, p, 3);
         Unquantize(ep[j], 7, 3);
         ep[j][3] = ParallelMath::MakeUInt15(255);
     }
 }
 
-void cvtt::Internal::BC7Computer::CompressEndpoints2(MUInt15 ep[2][4], const ParallelMath::RoundTowardNearestForScope *roundingMode)
+void cvtt::Internal::BC7Computer::CompressEndpoints2(MUInt15 ep[2][4])
 {
     for (int j = 0; j < 2; j++)
     {
-        Quantize(ep[j], 5, 3, roundingMode);
+        Quantize(ep[j], 5, 3);
         Unquantize(ep[j], 5, 3);
         ep[j][3] = ParallelMath::MakeUInt15(255);
     }
 }
 
-void cvtt::Internal::BC7Computer::CompressEndpoints3(MUInt15 ep[2][4], uint16_t p[2], const ParallelMath::RoundTowardNearestForScope *roundingMode)
+void cvtt::Internal::BC7Computer::CompressEndpoints3(MUInt15 ep[2][4], uint16_t p[2])
 {
     for (int j = 0; j < 2; j++)
     {
-        QuantizeP(ep[j], 7, p[j], 3, roundingMode);
+        QuantizeP(ep[j], 7, p[j], 3);
         ep[j][3] = ParallelMath::MakeUInt15(255);
     }
 }
 
-void cvtt::Internal::BC7Computer::CompressEndpoints4(MUInt15 epRGB[2][3], MUInt15 epA[2], const ParallelMath::RoundTowardNearestForScope *roundingMode)
+void cvtt::Internal::BC7Computer::CompressEndpoints4(MUInt15 epRGB[2][3], MUInt15 epA[2])
 {
     for (int j = 0; j < 2; j++)
     {
-        Quantize(epRGB[j], 5, 3, roundingMode);
+        Quantize(epRGB[j], 5, 3);
         Unquantize(epRGB[j], 5, 3);
 
-        Quantize(epA + j, 6, 1, roundingMode);
+        Quantize(epA + j, 6, 1);
         Unquantize(epA + j, 6, 1);
     }
 }
 
-void cvtt::Internal::BC7Computer::CompressEndpoints5(MUInt15 epRGB[2][3], MUInt15 epA[2], const ParallelMath::RoundTowardNearestForScope *roundingMode)
+void cvtt::Internal::BC7Computer::CompressEndpoints5(MUInt15 epRGB[2][3], MUInt15 epA[2])
 {
     for (int j = 0; j < 2; j++)
     {
-        Quantize(epRGB[j], 7, 3, roundingMode);
+        Quantize(epRGB[j], 7, 3);
         Unquantize(epRGB[j], 7, 3);
     }
 
@@ -1066,17 +1056,17 @@ void cvtt::Internal::BC7Computer::CompressEndpoints5(MUInt15 epRGB[2][3], MUInt1
     (void)epA;
 }
 
-void cvtt::Internal::BC7Computer::CompressEndpoints6(MUInt15 ep[2][4], uint16_t p[2], const ParallelMath::RoundTowardNearestForScope *roundingMode)
+void cvtt::Internal::BC7Computer::CompressEndpoints6(MUInt15 ep[2][4], uint16_t p[2])
 {
     for (int j = 0; j < 2; j++)
-        QuantizeP(ep[j], 7, p[j], 4, roundingMode);
+        QuantizeP(ep[j], 7, p[j], 4);
 }
 
-void cvtt::Internal::BC7Computer::CompressEndpoints7(MUInt15 ep[2][4], uint16_t p[2], const ParallelMath::RoundTowardNearestForScope *roundingMode)
+void cvtt::Internal::BC7Computer::CompressEndpoints7(MUInt15 ep[2][4], uint16_t p[2])
 {
     for (int j = 0; j < 2; j++)
     {
-        QuantizeP(ep[j], 5, p[j], 4, roundingMode);
+        QuantizeP(ep[j], 5, p[j], 4);
         Unquantize(ep[j], 6, 4);
     }
 }
@@ -1467,22 +1457,22 @@ void cvtt::Internal::BC7Computer::TrySinglePlane(uint32_t flags, const MUInt15 p
                         switch (mode)
                         {
                         case 0:
-                            CompressEndpoints0(ep, p, rtn);
+                            CompressEndpoints0(ep, p);
                             break;
                         case 1:
-                            CompressEndpoints1(ep, p[0], rtn);
+                            CompressEndpoints1(ep, p[0]);
                             break;
                         case 2:
-                            CompressEndpoints2(ep, rtn);
+                            CompressEndpoints2(ep);
                             break;
                         case 3:
-                            CompressEndpoints3(ep, p, rtn);
+                            CompressEndpoints3(ep, p);
                             break;
                         case 6:
-                            CompressEndpoints6(ep, p, rtn);
+                            CompressEndpoints6(ep, p);
                             break;
                         case 7:
-                            CompressEndpoints7(ep, p, rtn);
+                            CompressEndpoints7(ep, p);
                             break;
                         default:
                             assert(false);
@@ -1879,9 +1869,9 @@ void cvtt::Internal::BC7Computer::TryDualPlane(uint32_t flags, const MUInt15 pix
                     for (int refine = 0; refine < numRefineRounds; refine++)
                     {
                         if (mode == 4)
-                            CompressEndpoints4(rgbEP, alphaEP, rtn);
+                            CompressEndpoints4(rgbEP, alphaEP);
                         else
-                            CompressEndpoints5(rgbEP, alphaEP, rtn);
+                            CompressEndpoints5(rgbEP, alphaEP);
 
 
                         IndexSelector<1> alphaIndexSelector;

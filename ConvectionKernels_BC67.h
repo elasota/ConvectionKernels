@@ -47,17 +47,17 @@ namespace cvtt
             typedef ParallelMath::Float MFloat;
 
             static void TweakAlpha(const MUInt15 original[2], int tweak, int range, MUInt15 result[2]);
-            static void Quantize(MUInt15* color, int bits, int channels, const ParallelMath::RoundTowardNearestForScope *roundingMode);
-            static void QuantizeP(MUInt15* color, int bits, uint16_t p, int channels, const ParallelMath::RoundTowardNearestForScope *roundingMode);
+            static void Quantize(MUInt15* color, int bits, int channels);
+            static void QuantizeP(MUInt15* color, int bits, uint16_t p, int channels);
             static void Unquantize(MUInt15* color, int bits, int channels);
-            static void CompressEndpoints0(MUInt15 ep[2][4], uint16_t p[2], const ParallelMath::RoundTowardNearestForScope *roundingMode);
-            static void CompressEndpoints1(MUInt15 ep[2][4], uint16_t p, const ParallelMath::RoundTowardNearestForScope *roundingMode);
-            static void CompressEndpoints2(MUInt15 ep[2][4], const ParallelMath::RoundTowardNearestForScope *roundingMode);
-            static void CompressEndpoints3(MUInt15 ep[2][4], uint16_t p[2], const ParallelMath::RoundTowardNearestForScope *roundingMode);
-            static void CompressEndpoints4(MUInt15 epRGB[2][3], MUInt15 epA[2], const ParallelMath::RoundTowardNearestForScope *roundingMode);
-            static void CompressEndpoints5(MUInt15 epRGB[2][3], MUInt15 epA[2], const ParallelMath::RoundTowardNearestForScope *roundingMode);
-            static void CompressEndpoints6(MUInt15 ep[2][4], uint16_t p[2], const ParallelMath::RoundTowardNearestForScope *roundingMode);
-            static void CompressEndpoints7(MUInt15 ep[2][4], uint16_t p[2], const ParallelMath::RoundTowardNearestForScope *roundingMode);
+            static void CompressEndpoints0(MUInt15 ep[2][4], uint16_t p[2]);
+            static void CompressEndpoints1(MUInt15 ep[2][4], uint16_t p);
+            static void CompressEndpoints2(MUInt15 ep[2][4]);
+            static void CompressEndpoints3(MUInt15 ep[2][4], uint16_t p[2]);
+            static void CompressEndpoints4(MUInt15 epRGB[2][3], MUInt15 epA[2]);
+            static void CompressEndpoints5(MUInt15 epRGB[2][3], MUInt15 epA[2]);
+            static void CompressEndpoints6(MUInt15 ep[2][4], uint16_t p[2]);
+            static void CompressEndpoints7(MUInt15 ep[2][4], uint16_t p[2]);
             static void TrySingleColorRGBAMultiTable(uint32_t flags, const MUInt15 pixels[16][4], const MFloat average[4], int numRealChannels, const uint8_t *fragmentStart, int shapeLength, const MFloat &staticAlphaError, const ParallelMath::Int16CompFlag punchThroughInvalid[4], MFloat& shapeBestError, MUInt15 shapeBestEP[2][4], MUInt15 *fragmentBestIndexes, const float *channelWeightsSq, const cvtt::Tables::BC7SC::Table*const* tables, int numTables, const ParallelMath::RoundTowardNearestForScope *rtn);
             static void TrySinglePlane(uint32_t flags, const MUInt15 pixels[16][4], const MFloat floatPixels[16][4], const float channelWeights[4], int numTweakRounds, int numRefineRounds, BC67::WorkInfo& work, const ParallelMath::RoundTowardNearestForScope *rtn);
             static void TryDualPlane(uint32_t flags, const MUInt15 pixels[16][4], const MFloat floatPixels[16][4], const float channelWeights[4], int numTweakRounds, int numRefineRounds, BC67::WorkInfo& work, const ParallelMath::RoundTowardNearestForScope *rtn);
