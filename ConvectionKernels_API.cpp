@@ -290,11 +290,7 @@ namespace cvtt
             assert(pBlocks);
             assert(pBC);
 
-            for (size_t blockBase = 0; blockBase < cvtt::NumParallelBlocks; blockBase++)
-            {
-                Internal::BC7Computer::UnpackOne(pBlocks[blockBase], pBC);
-                pBC += 16;
-            }
+            Internal::BC7Computer::Unpack(pBlocks, pBC);
         }
 
         void DecodeBC6HU(PixelBlockF16 *pBlocks, const uint8_t *pBC)

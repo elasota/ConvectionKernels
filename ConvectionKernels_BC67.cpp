@@ -189,6 +189,26 @@ namespace cvtt
                 0xccf0, 0xfcc, 0x7744, 0xee22,
             };
 
+            static uint32_t g_partitionMap_32[64] =
+            {
+                0x50505050, 0x40404040, 0x54545454, 0x54505040,
+                0x50404000, 0x55545450, 0x55545040, 0x54504000,
+                0x50400000, 0x55555450, 0x55544000, 0x54400000,
+                0x55555440, 0x55550000, 0x55555500, 0x55000000,
+                0x55150100, 0x00004054, 0x15010000, 0x00405054,
+                0x00004050, 0x15050100, 0x05010000, 0x40505054,
+                0x00404050, 0x05010100, 0x14141414, 0x05141450,
+                0x01155440, 0x00555500, 0x15014054, 0x05414150,
+                0x44444444, 0x55005500, 0x11441144, 0x05055050,
+                0x05500550, 0x11114444, 0x41144114, 0x44111144,
+                0x15055054, 0x01055040, 0x05041050, 0x05455150,
+                0x14414114, 0x50050550, 0x41411414, 0x00141400,
+                0x00041504, 0x00105410, 0x10541000, 0x04150400,
+                0x50410514, 0x41051450, 0x05415014, 0x14054150,
+                0x41050514, 0x41505014, 0x40011554, 0x54150140,
+                0x50505500, 0x00555050, 0x15151010, 0x54540404,
+            };
+
             static uint32_t g_partitionMap2[64] =
             {
                 0xaa685050, 0x6a5a5040, 0x5a5a4200, 0x5450a0a8,
@@ -2286,222 +2306,591 @@ void cvtt::Internal::BC7Computer::Pack(uint32_t flags, const PixelBlockU8* input
     }
 }
 
-void cvtt::Internal::BC7Computer::UnpackOne(PixelBlockU8 &output, const uint8_t* packedBlock)
+void cvtt::Internal::BC7Computer::Unpack(PixelBlockU8 *output, const uint8_t* packedBlocks)
 {
-    UnpackingVector pv;
-    pv.Init(packedBlock);
+    ParallelMath::ScalarUInt128 zero;
+    zero.m_low = zero.m_high = 0;
 
-    int mode = 8;
-    for (int i = 0; i < 8; i++)
+    MUInt128 bulkBits = ParallelMath::MakeUInt128(zero);
+
+    ParallelMath::UInt16 firstWord;
+
+    for (int blk = 0; blk < ParallelMath::ParallelSize; blk++)
     {
-        if (pv.Unpack(1) == 1)
+        const uint8_t *blockStart = packedBlocks + blk * 16;
+
+        ParallelMath::ScalarUInt128 blockBits;
+
+        if (blockStart[0] == 0)
         {
-            mode = i;
-            break;
+            // Block is corrupt, zero-fill the block
+            blockBits.m_low = static_cast<uint64_t>(1) << 6;
+            blockBits.m_high = 0;
         }
-    }
-
-    if (mode > 7)
-    {
-        for (int px = 0; px < 16; px++)
-            for (int ch = 0; ch < 4; ch++)
-                output.m_pixels[px][ch] = 0;
-
-        return;
-    }
-
-    const BC7Data::BC7ModeInfo &modeInfo = BC7Data::g_modes[mode];
-
-    int partition = 0;
-    if (modeInfo.m_partitionBits)
-        partition = pv.Unpack(modeInfo.m_partitionBits);
-
-    int rotation = 0;
-    if (modeInfo.m_alphaMode == BC7Data::AlphaMode_Separate)
-        rotation = pv.Unpack(2);
-
-    int indexSelector = 0;
-    if (modeInfo.m_hasIndexSelector)
-        indexSelector = pv.Unpack(1);
-
-    // Resolve fixups
-    int fixups[3] = { 0, 0, 0 };
-
-    if (modeInfo.m_alphaMode != BC7Data::AlphaMode_Separate)
-    {
-        if (modeInfo.m_numSubsets == 2)
-            fixups[1] = BC7Data::g_fixupIndexes2[partition];
-        else if (modeInfo.m_numSubsets == 3)
+        else
         {
+            blockBits.m_low = 0;
+            blockBits.m_high = 0;
+            for (int bi = 0; bi < 8; bi++)
+                blockBits.m_low |= static_cast<uint64_t>(blockStart[bi]) << (8 * bi);
+            for (int bi = 0; bi < 8; bi++)
+                blockBits.m_high |= static_cast<uint64_t>(blockStart[bi + 8]) << (8 * bi);
+        }
+
+        ParallelMath::PutUInt128(bulkBits, blk, blockBits);
+        ParallelMath::PutUInt16(firstWord, blk, static_cast<uint16_t>((blockStart[1] << 8) | blockStart[0]));
+    }
+
+    ParallelMath::Int16CompFlag modeMissing = ParallelMath::MakeBoolInt16(true);
+    ParallelMath::UInt15 modeIndex = ParallelMath::MakeUInt15(0);
+    ParallelMath::Int16RightShiftMin1Bits modeConsumeBits = ParallelMath::Int16RightShiftMin1Bits::Create(1);
+
+    for (int mode = 0; mode < 8; mode++)
+    {
+        ParallelMath::UInt16 modeFlag = ParallelMath::MakeUInt16(1 << mode);
+        ParallelMath::UInt15 thisModeIndex = ParallelMath::MakeUInt15(mode);
+
+        ParallelMath::Int16CompFlag modeBitNotSet = ParallelMath::Equal((modeFlag & firstWord), ParallelMath::MakeUInt16(0));
+
+        modeMissing = (modeBitNotSet & modeMissing);
+
+        modeIndex = modeIndex + ParallelMath::SelectOrZero(modeMissing, ParallelMath::MakeUInt15(1));
+        modeConsumeBits.ConditionalIncrement(modeMissing, 1);
+
+        if (!ParallelMath::AnySet(modeMissing))
+            break;
+    }
+
+    ParallelMath::UInt16 modeAuxBits = ParallelMath::VRightShiftMin1(firstWord, modeConsumeBits);
+
+    const int modeAuxBitsCount[8] = { 4, 6, 6, 6, 3, 2, 0, 6 };
+
+    MUInt128 endpointBits = ParallelMath::MakeUInt128(zero);
+    MUInt128 indexBits = ParallelMath::MakeUInt128(zero);
+
+    int numHeaderBits[ParallelMath::ParallelSize];
+    int numRGBChannelEndpointBits[ParallelMath::ParallelSize];
+    int numAlphaEndpointBits[ParallelMath::ParallelSize];
+    int numParityBits[ParallelMath::ParallelSize];
+    int halfPointToAlphaOffset[ParallelMath::ParallelSize];
+
+    MUInt15 rgbEndpointMask;
+    ParallelMath::Int16RightShiftMin1Bits rgbEndpointShiftBits;
+    MUInt15 alphaEndpointMask;
+    ParallelMath::Int16RightShiftMin1Bits alphaEndpointShiftBits;
+
+    ParallelMath::Int32LeftShiftBitsMax15 subset1ShiftTo14 = ParallelMath::Int32LeftShiftBitsMax15::Create(0);
+    ParallelMath::Int32LeftShiftBitsMax15 subset2ShiftTo20 = ParallelMath::Int32LeftShiftBitsMax15::Create(0);
+
+    MUInt15 rgbExpansionMultiplier;
+    MUInt15 alphaExpansionMultiplier;
+    ParallelMath::Int16CompFlag hasParityBits = ParallelMath::MakeBoolInt16(false);
+
+    MUInt16 rgbFixupMask = ParallelMath::MakeUInt16(0);
+    MUInt16 alphaFixupMask = ParallelMath::MakeUInt16(0);
+
+    MUInt16 auxDataMask = ParallelMath::MakeUInt16(0);
+
+    ParallelMath::Int16CompFlag isDualPlane = ParallelMath::MakeBoolInt16(false);
+
+    bool anyRotation = false;
+    int maxSubsets = 1;
+    for (int blk = 0; blk < ParallelMath::ParallelSize; blk++)
+    {
+        int elementModeIndex = ParallelMath::Extract(modeIndex, blk);
+
+        const BC7Data::BC7ModeInfo &modeInfo = BC7Data::g_modes[elementModeIndex];
+
+        numHeaderBits[blk] = elementModeIndex + 1 + modeAuxBitsCount[elementModeIndex];
+        numRGBChannelEndpointBits[blk] = modeInfo.m_rgbBits * 2 * modeInfo.m_numSubsets;
+        numAlphaEndpointBits[blk] = modeInfo.m_alphaBits * 2 * modeInfo.m_numSubsets;
+
+        int rgbExpansionBits = modeInfo.m_rgbBits;
+        int alphaExpansionBits = modeInfo.m_alphaBits;
+
+        if (modeInfo.m_pBitMode == BC7Data::PBitMode_None)
+        {
+            numParityBits[blk] = 0;
+        }
+        else if (modeInfo.m_pBitMode == BC7Data::PBitMode_PerEndpoint)
+        {
+            numParityBits[blk] = modeInfo.m_numSubsets * 2;
+            rgbExpansionBits++;
+            alphaExpansionBits++;
+            ParallelMath::PutBoolInt16(hasParityBits, blk, true);
+        }
+        else if (modeInfo.m_pBitMode == BC7Data::PBitMode_PerSubset)
+        {
+            numParityBits[blk] = modeInfo.m_numSubsets;
+            rgbExpansionBits++;
+            alphaExpansionBits++;
+            ParallelMath::PutBoolInt16(hasParityBits, blk, true);
+        }
+
+        halfPointToAlphaOffset[blk] = 0;
+
+        if (modeInfo.m_alphaIndexBits != 0)
+        {
+            ParallelMath::PutBoolInt16(isDualPlane, blk, true);
+            halfPointToAlphaOffset[blk] = 64 - (modeInfo.m_alphaIndexBits * 16 - modeInfo.m_numSubsets);
+        }
+
+        int rgbExpand = (1 | (1 << rgbExpansionBits)) << (16 - 2 * rgbExpansionBits);
+        int alphaExpand = (1 | (1 << alphaExpansionBits)) << (16 - 2 * alphaExpansionBits);
+
+        ParallelMath::PutUInt16(auxDataMask, blk, (1 << modeAuxBitsCount[elementModeIndex]) - 1);
+
+        if (modeInfo.m_numSubsets > maxSubsets)
+            maxSubsets = modeInfo.m_numSubsets;
+
+        ParallelMath::PutUInt15(rgbEndpointMask, blk, (1 << modeInfo.m_rgbBits) - 1);
+        rgbEndpointShiftBits.Put(blk, modeInfo.m_rgbBits);
+        ParallelMath::PutUInt15(alphaEndpointMask, blk, (1 << modeInfo.m_alphaBits) - 1);
+        alphaEndpointShiftBits.Put(blk, modeInfo.m_alphaBits);
+
+        subset1ShiftTo14.Put(blk, 14 - modeInfo.m_rgbBits * 2);
+        subset2ShiftTo20.Put(blk, 20 - modeInfo.m_rgbBits * 4);
+
+        ParallelMath::PutUInt15(rgbExpansionMultiplier, blk, rgbExpand);
+        ParallelMath::PutUInt15(alphaExpansionMultiplier, blk, alphaExpand);
+    }
+
+    ParallelMath::Int16CompFlag hasAlphaChannel = ParallelMath::Less(ParallelMath::MakeUInt15(3), modeIndex);
+
+    MUInt15 auxData = ParallelMath::LosslessCast<MUInt15>::Cast(modeAuxBits & auxDataMask);
+
+    MUInt15 four = ParallelMath::MakeUInt15(4);
+    ParallelMath::Int16CompFlag hasIndexRotation = ParallelMath::Equal(modeIndex, four) & ParallelMath::Equal(auxData & four, four);
+
+    ParallelMath::UInt128 rEndpointBitsBulk = ParallelMath::VRightShift(bulkBits, numHeaderBits);
+    ParallelMath::UInt128 gEndpointBitsBulk = ParallelMath::VRightShift(rEndpointBitsBulk, numRGBChannelEndpointBits);
+    ParallelMath::UInt128 bEndpointBitsBulk = ParallelMath::VRightShift(gEndpointBitsBulk, numRGBChannelEndpointBits);
+    ParallelMath::UInt128 aEndpointBitsBulk = ParallelMath::VRightShift(bEndpointBitsBulk, numRGBChannelEndpointBits);
+    ParallelMath::UInt128 parityBitsBulk = ParallelMath::VRightShift(aEndpointBitsBulk, numAlphaEndpointBits);
+    ParallelMath::UInt128 rgbIndexBitsBulk = ParallelMath::VRightShift(parityBitsBulk, numParityBits);
+
+    ParallelMath::UInt64 alphaIndexBits64 = ParallelMath::VRightShift(ParallelMath::GetUInt128HighHalf(bulkBits), halfPointToAlphaOffset);
+
+    ParallelMath::UInt32 endpointsBulk32[4] =
+    {
+        ParallelMath::GetUInt64LowHalf(ParallelMath::GetUInt128LowHalf(rEndpointBitsBulk)),
+        ParallelMath::GetUInt64LowHalf(ParallelMath::GetUInt128LowHalf(gEndpointBitsBulk)),
+        ParallelMath::GetUInt64LowHalf(ParallelMath::GetUInt128LowHalf(bEndpointBitsBulk)),
+        ParallelMath::GetUInt64LowHalf(ParallelMath::GetUInt128LowHalf(aEndpointBitsBulk))
+    };
+
+    ParallelMath::UInt16 parityBitsBulk16 = ParallelMath::GetUInt32LowHalf(ParallelMath::GetUInt64LowHalf(ParallelMath::GetUInt128LowHalf(parityBitsBulk)));
+    ParallelMath::UInt64 indexBitsBulk64[2] = { ParallelMath::GetUInt128LowHalf(rgbIndexBitsBulk), alphaIndexBits64 };
+
+    ParallelMath::UInt15 planeIndexMasks[2];
+    ParallelMath::Int16RightShiftMin1Bits planeIndexConsumeBits[2];
+
+    ParallelMath::UInt16 rgbWeightReciprocal;
+    ParallelMath::UInt16 alphaWeightReciprocal;
+
+    ParallelMath::UInt32 partitionMap = ParallelMath::MakeUInt32(0);
+
+    int maxPlanes = (ParallelMath::AnySet(isDualPlane)) ? 2 : 1;
+
+    ParallelMath::UInt64 indexBitsRealigned[2];
+
+    // Insert zeros into fixup indexes and align each row to 16 bits
+    for (int blk = 0; blk < ParallelMath::ParallelSize; blk++)
+    {
+        int elementModeIndex = ParallelMath::Extract(modeIndex, blk);
+
+        const BC7Data::BC7ModeInfo &modeInfo = BC7Data::g_modes[elementModeIndex];
+        int numSubsets = modeInfo.m_numSubsets;
+        uint32_t partition = 0;
+
+        int fixups[3] = { 0, 0, 0 };
+        if (numSubsets == 2)
+        {
+            partition = ParallelMath::Extract(auxData, blk);
+            fixups[1] = BC7Data::g_fixupIndexes2[partition];
+            ParallelMath::PutUInt32(partitionMap, blk, BC7Data::g_partitionMap_32[partition]);
+        }
+        else if (numSubsets == 3)
+        {
+            partition = ParallelMath::Extract(auxData, blk);
             fixups[1] = BC7Data::g_fixupIndexes3[partition][0];
             fixups[2] = BC7Data::g_fixupIndexes3[partition][1];
+
+            if (fixups[1] > fixups[2])
+                std::swap(fixups[1], fixups[2]);
+
+            ParallelMath::PutUInt32(partitionMap, blk, BC7Data::g_partitionMap2[partition]);
+        }
+
+        bool blockHasIndexRotation = ParallelMath::Extract(hasIndexRotation, blk);
+
+        for (int plane = 0; plane < 2; plane++)
+        {
+            ParallelMath::UInt64 planeBits = indexBitsBulk64[plane];
+            int planeIndexBitSize = (plane == 0) ? modeInfo.m_indexBits : modeInfo.m_alphaIndexBits;
+
+            uint64_t indexBits = ParallelMath::Extract(planeBits, blk);
+
+            for (int i = 0; i < numSubsets; i++)
+            {
+                int lowBitsBeforeFixup = planeIndexBitSize * (fixups[i] + 1) - 1;
+                uint64_t lowBitMask = (static_cast<uint64_t>(1) << lowBitsBeforeFixup) - 1;
+                uint64_t invLowBitMask = ~lowBitMask;
+
+                indexBits = ((indexBits & invLowBitMask) << 1) | (indexBits & lowBitMask);
+            }
+
+            int rowBitSize = (planeIndexBitSize * 4);
+            uint64_t secondHalf = (indexBits << (32 - planeIndexBitSize * 8)) & 0xffffffff00000000ULL;
+            indexBits = (indexBits & 0xffffffffULL) | secondHalf;
+
+            uint64_t oddRows = (indexBits << (16 - planeIndexBitSize * 4)) & 0xffff0000ffff0000ULL;
+            indexBits = (indexBits & 0xffff0000ffffULL) | oddRows;
+
+            int rowIndexMask = (1 << planeIndexBitSize) - 1;
+
+            int targetPlane = plane;
+            if (blockHasIndexRotation)
+                targetPlane ^= 1;
+
+            ParallelMath::PutUInt15(planeIndexMasks[targetPlane], blk, rowIndexMask);
+            ParallelMath::PutUInt64(indexBitsRealigned[targetPlane], blk, indexBits);
+            planeIndexConsumeBits[targetPlane].Put(blk, planeIndexBitSize);
+
+            if (modeInfo.m_alphaIndexBits == 0)
+            {
+                ParallelMath::PutUInt64(indexBitsBulk64[targetPlane ^ 1], blk, indexBits);
+                ParallelMath::PutUInt15(planeIndexMasks[targetPlane ^ 1], blk, rowIndexMask);
+                planeIndexConsumeBits[targetPlane ^ 1].Put(blk, planeIndexBitSize);
+                break;
+            }
+        }
+
+        int rgbRange = blockHasIndexRotation ? (1 << modeInfo.m_alphaIndexBits) : (1 << modeInfo.m_indexBits);
+        int alphaRange = blockHasIndexRotation ? (1 << modeInfo.m_indexBits) : (1 << modeInfo.m_alphaIndexBits);
+
+        ParallelMath::PutUInt16(rgbWeightReciprocal, blk, g_weightReciprocalsScalar[rgbRange]);
+        ParallelMath::PutUInt16(alphaWeightReciprocal, blk, g_weightReciprocalsScalar[alphaRange]);
+    }
+    
+    MUInt15 planeIndexes[2][16];
+
+    for (int plane = 0; plane < maxPlanes; plane++)
+    {
+        ParallelMath::UInt32 rowPairs[2];
+        ParallelMath::UInt16 rows[4];
+
+        ParallelMath::Int16RightShiftMin1Bits rShiftBits = planeIndexConsumeBits[plane];
+        ParallelMath::UInt15 indexBitMask = planeIndexMasks[plane];
+
+        rowPairs[0] = ParallelMath::GetUInt64LowHalf(indexBitsRealigned[plane]);
+        rowPairs[1] = ParallelMath::GetUInt64HighHalf(indexBitsRealigned[plane]);
+
+        rows[0] = ParallelMath::GetUInt32LowHalf(rowPairs[0]);
+        rows[1] = ParallelMath::GetUInt32HighHalf(rowPairs[0]);
+        rows[2] = ParallelMath::GetUInt32LowHalf(rowPairs[1]);
+        rows[3] = ParallelMath::GetUInt32HighHalf(rowPairs[1]);
+
+        for (int row = 0; row < 4; row++)
+        {
+            MUInt16 rowBits = rows[row];
+            for (int col = 0; col < 4; col++)
+            {
+                planeIndexes[plane][row * 4 + col] = ParallelMath::LosslessCast<MUInt15>::Cast(rowBits) & indexBitMask;
+                rowBits = ParallelMath::VRightShiftMin1(rowBits, rShiftBits);
+            }
         }
     }
 
-    int endPoints[3][2][4];
+    const MUInt15 *rgbPlaneIndexes = planeIndexes[0];
+    const MUInt15 *alphaPlaneIndexes = (maxPlanes == 1) ? planeIndexes[0] : planeIndexes[1];
 
-    // Decode RGB
+    int maxChannelsToDecode = ParallelMath::AnySet(hasAlphaChannel) ? 4 : 3;
+
+    MUInt15 endpoints[3][2][4];
+
+    // Decode endpoints
     for (int ch = 0; ch < 3; ch++)
     {
-        for (int subset = 0; subset < modeInfo.m_numSubsets; subset++)
-        {
-            for (int ep = 0; ep < 2; ep++)
-                endPoints[subset][ep][ch] = (pv.Unpack(modeInfo.m_rgbBits) << (8 - modeInfo.m_rgbBits));
-        }
+        MUInt15 channelData = ParallelMath::LosslessCast<MUInt15>::Cast(ParallelMath::GetUInt32LowHalf(endpointsBulk32[ch]));
+        endpoints[0][0][ch] = (channelData & rgbEndpointMask);
+        endpoints[0][1][ch] = (ParallelMath::VRightShiftMin1(channelData, rgbEndpointShiftBits) & rgbEndpointMask);
     }
 
-    // Decode alpha
-    if (modeInfo.m_alphaMode != BC7Data::AlphaMode_None)
+    if (maxSubsets >= 2)
     {
-        for (int subset = 0; subset < modeInfo.m_numSubsets; subset++)
-        {
-            for (int ep = 0; ep < 2; ep++)
-                endPoints[subset][ep][3] = (pv.Unpack(modeInfo.m_alphaBits) << (8 - modeInfo.m_alphaBits));
-        }
-    }
-    else
-    {
-        for (int subset = 0; subset < modeInfo.m_numSubsets; subset++)
-        {
-            for (int ep = 0; ep < 2; ep++)
-                endPoints[subset][ep][3] = 255;
-        }
-    }
-
-    int parityBits = 0;
-
-    // Decode parity bits
-    if (modeInfo.m_pBitMode == BC7Data::PBitMode_PerSubset)
-    {
-        for (int subset = 0; subset < modeInfo.m_numSubsets; subset++)
-        {
-            int p = pv.Unpack(1);
-
-            for (int ep = 0; ep < 2; ep++)
-            {
-                for (int ch = 0; ch < 3; ch++)
-                    endPoints[subset][ep][ch] |= p << (7 - modeInfo.m_rgbBits);
-
-                if (modeInfo.m_alphaMode != BC7Data::AlphaMode_None)
-                    endPoints[subset][ep][3] |= p << (7 - modeInfo.m_alphaBits);
-            }
-        }
-
-        parityBits = 1;
-    }
-    else if (modeInfo.m_pBitMode == BC7Data::PBitMode_PerEndpoint)
-    {
-        for (int subset = 0; subset < modeInfo.m_numSubsets; subset++)
-        {
-            for (int ep = 0; ep < 2; ep++)
-            {
-                int p = pv.Unpack(1);
-
-                for (int ch = 0; ch < 3; ch++)
-                    endPoints[subset][ep][ch] |= p << (7 - modeInfo.m_rgbBits);
-
-                if (modeInfo.m_alphaMode != BC7Data::AlphaMode_None)
-                    endPoints[subset][ep][3] |= p << (7 - modeInfo.m_alphaBits);
-            }
-        }
-
-        parityBits = 1;
-    }
-
-    // Fill endpoint bits
-    for (int subset = 0; subset < modeInfo.m_numSubsets; subset++)
-    {
-        for (int ep = 0; ep < 2; ep++)
-        {
-            for (int ch = 0; ch < 3; ch++)
-                endPoints[subset][ep][ch] |= (endPoints[subset][ep][ch] >> (modeInfo.m_rgbBits + parityBits));
-
-            if (modeInfo.m_alphaMode != BC7Data::AlphaMode_None)
-                endPoints[subset][ep][3] |= (endPoints[subset][ep][3] >> (modeInfo.m_alphaBits + parityBits));
-        }
-    }
-
-    int indexes[16];
-    int indexes2[16];
-
-    // Decode indexes
-    for (int px = 0; px < 16; px++)
-    {
-        int bits = modeInfo.m_indexBits;
-        if ((px == 0) || (px == fixups[1]) || (px == fixups[2]))
-            bits--;
-
-        indexes[px] = pv.Unpack(bits);
-    }
-
-    // Decode secondary indexes
-    if (modeInfo.m_alphaMode == BC7Data::AlphaMode_Separate)
-    {
-        for (int px = 0; px < 16; px++)
-        {
-            int bits = modeInfo.m_alphaIndexBits;
-            if (px == 0)
-                bits--;
-
-            indexes2[px] = pv.Unpack(bits);
-        }
-    }
-    else
-    {
-        for (int px = 0; px < 16; px++)
-            indexes2[px] = 0;
-    }
-
-    const int *alphaWeights = BC7Data::g_weightTables[modeInfo.m_alphaIndexBits];
-    const int *rgbWeights = BC7Data::g_weightTables[modeInfo.m_indexBits];
-
-    // Decode each pixel
-    for (int px = 0; px < 16; px++)
-    {
-        int rgbWeight = 0;
-        int alphaWeight = 0;
-
-        int rgbIndex = indexes[px];
-
-        rgbWeight = rgbWeights[indexes[px]];
-
-        if (modeInfo.m_alphaMode == BC7Data::AlphaMode_Combined)
-            alphaWeight = rgbWeight;
-        else if (modeInfo.m_alphaMode == BC7Data::AlphaMode_Separate)
-            alphaWeight = alphaWeights[indexes2[px]];
-
-        if (indexSelector == 1)
-        {
-            int temp = rgbWeight;
-            rgbWeight = alphaWeight;
-            alphaWeight = temp;
-        }
-
-        int pixel[4] = { 0, 0, 0, 255 };
-
-        int subset = 0;
-
-        if (modeInfo.m_numSubsets == 2)
-            subset = (BC7Data::g_partitionMap[partition] >> px) & 1;
-        else if (modeInfo.m_numSubsets == 3)
-            subset = (BC7Data::g_partitionMap2[partition] >> (px * 2)) & 3;
-
         for (int ch = 0; ch < 3; ch++)
-            pixel[ch] = ((64 - rgbWeight) * endPoints[subset][0][ch] + rgbWeight * endPoints[subset][1][ch] + 32) >> 6;
-
-        if (modeInfo.m_alphaMode != BC7Data::AlphaMode_None)
-            pixel[3] = ((64 - alphaWeight) * endPoints[subset][0][3] + alphaWeight * endPoints[subset][1][3] + 32) >> 6;
-
-        if (rotation != 0)
         {
-            int ch = rotation - 1;
-            int temp = pixel[ch];
-            pixel[ch] = pixel[3];
-            pixel[3] = temp;
+            ParallelMath::UInt31 bulk31 = ParallelMath::LosslessCast<ParallelMath::UInt31>::Cast(endpointsBulk32[ch]);
+            ParallelMath::UInt31 bulkAtZero = ParallelMath::RightShift(ParallelMath::VLeftShift(bulk31, subset1ShiftTo14), 14);
+            ParallelMath::UInt15 bulk15 = ParallelMath::ToUInt15(bulkAtZero & ParallelMath::MakeUInt31(0x7fff));
+
+            endpoints[1][0][ch] = (bulk15 & rgbEndpointMask);
+            endpoints[1][1][ch] = (ParallelMath::VRightShiftMin1(bulk15, rgbEndpointShiftBits) & rgbEndpointMask);
+        }
+    }
+
+    if (maxSubsets >= 3)
+    {
+        for (int ch = 0; ch < 3; ch++)
+        {
+            ParallelMath::UInt31 bulk31 = ParallelMath::LosslessCast<ParallelMath::UInt31>::Cast(endpointsBulk32[ch]);
+            ParallelMath::UInt31 bulkAtZero = ParallelMath::RightShift(ParallelMath::VLeftShift(bulk31, subset2ShiftTo20), 20);
+            ParallelMath::UInt15 bulk15 = ParallelMath::ToUInt15(bulkAtZero & ParallelMath::MakeUInt31(0x7fff));
+
+            endpoints[2][0][ch] = (bulk15 & rgbEndpointMask);
+            endpoints[2][1][ch] = (ParallelMath::VRightShiftMin1(bulk15, rgbEndpointShiftBits) & rgbEndpointMask);
+        }
+    }
+
+    if (maxChannelsToDecode >= 4)
+    {
+        MUInt15 channelData = ParallelMath::LosslessCast<MUInt15>::Cast(ParallelMath::GetUInt32LowHalf(endpointsBulk32[3]));
+        endpoints[0][0][3] = (channelData & alphaEndpointMask);
+        endpoints[0][1][3] = (ParallelMath::VRightShiftMin1(channelData, alphaEndpointShiftBits) & alphaEndpointMask);
+
+        if (maxSubsets >= 2)
+        {
+            ParallelMath::UInt31 bulk31 = ParallelMath::LosslessCast<ParallelMath::UInt31>::Cast(endpointsBulk32[3]);
+            ParallelMath::UInt31 bulkAtZero = ParallelMath::RightShift(ParallelMath::VLeftShift(bulk31, subset1ShiftTo14), 14);
+            ParallelMath::UInt15 bulk15 = ParallelMath::ToUInt15(bulkAtZero & ParallelMath::MakeUInt31(0x7fff));
+
+            endpoints[1][0][3] = (bulk15 & alphaEndpointMask);
+            endpoints[1][1][3] = (ParallelMath::VRightShiftMin1(bulk15, alphaEndpointShiftBits) & alphaEndpointMask);
+        }
+    }
+
+    if (ParallelMath::AnySet(hasParityBits))
+    {
+        MUInt15 parityBits = ParallelMath::LosslessCast<MUInt15>::Cast(parityBitsBulk16);
+
+        ParallelMath::Int16CompFlag isMode1 = ParallelMath::Equal(modeIndex, ParallelMath::MakeUInt15(1));
+
+        if (ParallelMath::AnySet(isMode1))
+        {
+            // Expand per-subset to per-endpoint
+            MUInt15 lowBit = (parityBits & ParallelMath::MakeUInt15(1));
+            MUInt15 highBit = (parityBits & ParallelMath::MakeUInt15(2));
+            MUInt16 combined = ParallelMath::CompactMultiply(lowBit, ParallelMath::MakeUInt15(3)) | ParallelMath::CompactMultiply(highBit, ParallelMath::MakeUInt15(6));
+            ParallelMath::ConditionalSet(parityBits, isMode1, ParallelMath::LosslessCast<MUInt15>::Cast(combined));
         }
 
-        for (int ch = 0; ch < 4; ch++)
-            output.m_pixels[px][ch] = static_cast<uint8_t>(pixel[ch]);
+        for (int subset = 0; subset < maxSubsets; subset++)
+        {
+            for (int epi = 0; epi < 2; epi++)
+            {
+                MUInt15 parityBit = parityBits & ParallelMath::MakeUInt15(1);
+                parityBits = ParallelMath::RightShift(parityBits, 1);
+
+                for (int ch = 0; ch < maxChannelsToDecode; ch++)
+                {
+                    MUInt15 expanded = (endpoints[subset][epi][ch] << 1) | parityBit;
+                    ParallelMath::ConditionalSet(endpoints[subset][epi][ch], hasParityBits, expanded);
+                }
+            }
+        }
+    }
+
+    // Decompress endpoints
+    for (int ch = 0; ch < 3; ch++)
+    {
+        for (int epi = 0; epi < 2; epi++)
+        {
+            for (int subset = 0; subset < maxSubsets; subset++)
+            {
+                ParallelMath::UInt16 expanded = ParallelMath::RightShift(ParallelMath::CompactMultiply(endpoints[subset][epi][ch], rgbExpansionMultiplier), 8);
+                endpoints[subset][epi][ch] = ParallelMath::LosslessCast<MUInt15>::Cast(expanded);
+            }
+        }
+    }
+
+    // Decompress alpha
+    if (ParallelMath::AnySet(hasAlphaChannel))
+    {
+        for (int epi = 0; epi < 2; epi++)
+        {
+            for (int subset = 0; subset < maxSubsets; subset++)
+            {
+                ParallelMath::UInt16 expanded = ParallelMath::RightShift(ParallelMath::CompactMultiply(endpoints[subset][epi][3], alphaExpansionMultiplier), 8);
+                endpoints[subset][epi][3] = ParallelMath::LosslessCast<MUInt15>::Cast(expanded);
+            }
+        }
+    }
+
+    // Force alpha to 255 for non-alpha modes
+    if (!ParallelMath::AllSet(hasAlphaChannel))
+    {
+        if (ParallelMath::AnySet(hasAlphaChannel))
+        {
+            for (int epi = 0; epi < 2; epi++)
+            {
+                for (int subset = 0; subset < maxSubsets; subset++)
+                    ParallelMath::NotConditionalSet(endpoints[subset][epi][3], hasAlphaChannel, ParallelMath::MakeUInt15(255));
+            }
+        }
+    }
+
+    MUInt15 pixelValues[16][4];
+
+    // Interpolate main indexes
+    int maxCoherentChannels = 3;
+    ParallelMath::Int16CompFlag hasCoherentAlpha = ParallelMath::Less(ParallelMath::MakeUInt15(5), modeIndex);
+
+    if (ParallelMath::AnySet(hasCoherentAlpha))
+        maxCoherentChannels = 4;
+
+    if (maxCoherentChannels == 3 && !ParallelMath::AllSet(isDualPlane))
+    {
+        // If we have RGB modes and no coherent alpha mode, then init alpha
+        for (int px = 0; px < 16; px++)
+            pixelValues[px][3] = ParallelMath::MakeUInt15(255);
+    }
+
+    // Pixel 0 is always subset 0
+    ReconstructLDR_BC7_Static(planeIndexes[0][0], endpoints[0][0], endpoints[0][1], rgbWeightReciprocal, pixelValues[0], maxCoherentChannels);
+
+    if (maxSubsets == 1)
+    {
+        for (int px = 1; px < 16; px++)
+            ReconstructLDR_BC7_Static(planeIndexes[0][px], endpoints[0][0], endpoints[0][1], rgbWeightReciprocal, pixelValues[px], maxCoherentChannels);
+    }
+    else if (maxSubsets == 2)
+    {
+        MUInt16 partitions = ParallelMath::GetUInt32LowHalf(partitionMap);
+        for (int px = 1; px < 16; px++)
+        {
+            if (px == 8)
+                partitions = ParallelMath::GetUInt32HighHalf(partitionMap);
+            else
+                partitions = ParallelMath::RightShift(partitions, 2);
+
+            MUInt15 thisPartition = ParallelMath::LosslessCast<MUInt15>::Cast(partitions & ParallelMath::MakeUInt16(3));
+
+            ParallelMath::Int16CompFlag isPart1 = ParallelMath::Equal(thisPartition, ParallelMath::MakeUInt15(1));
+
+            MUInt15 partitionedEPs[2][4];
+            for (int ch = 0; ch < maxCoherentChannels; ch++)
+                for (int epi = 0; epi < 2; epi++)
+                    partitionedEPs[epi][ch] = ParallelMath::Select(isPart1, endpoints[1][epi][ch], endpoints[0][epi][ch]);
+
+            ReconstructLDR_BC7_Static(planeIndexes[0][px], partitionedEPs[0], partitionedEPs[1], rgbWeightReciprocal, pixelValues[px], maxCoherentChannels);
+        }
+    }
+    else if (maxSubsets == 3)
+    {
+        MUInt16 partitions = ParallelMath::GetUInt32LowHalf(partitionMap);
+        for (int px = 1; px < 16; px++)
+        {
+            if (px == 8)
+                partitions = ParallelMath::GetUInt32HighHalf(partitionMap);
+            else
+                partitions = ParallelMath::RightShift(partitions, 2);
+
+            MUInt15 thisPartition = ParallelMath::LosslessCast<MUInt15>::Cast(partitions & ParallelMath::MakeUInt16(3));
+
+            ParallelMath::Int16CompFlag isPart1 = ParallelMath::Equal(thisPartition, ParallelMath::MakeUInt15(1));
+            ParallelMath::Int16CompFlag isPart2 = ParallelMath::Equal(thisPartition, ParallelMath::MakeUInt15(2));
+
+            MUInt15 partitionedEPs[2][4];
+            for (int ch = 0; ch < maxCoherentChannels; ch++)
+            {
+                for (int epi = 0; epi < 2; epi++)
+                {
+                    partitionedEPs[epi][ch] = ParallelMath::Select(isPart1, endpoints[1][epi][ch], endpoints[0][epi][ch]);
+                    ParallelMath::ConditionalSet(partitionedEPs[epi][ch], isPart2, endpoints[2][epi][ch]);
+                }
+            }
+
+            ReconstructLDR_BC7_Static(planeIndexes[0][px], partitionedEPs[0], partitionedEPs[1], rgbWeightReciprocal, pixelValues[px], maxCoherentChannels);
+        }
+    }
+
+    // Interpolate alphas
+    if (maxPlanes == 2)
+    {
+        for (int px = 0; px < 16; px++)
+        {
+            MUInt15 alpha;
+            ReconstructLDR_BC7_Static(alphaPlaneIndexes[px], endpoints[0][0] + 3, endpoints[0][1] + 3, alphaWeightReciprocal, &alpha, 1);
+            ParallelMath::ConditionalSet(pixelValues[px][3], isDualPlane, alpha);
+        }
+    }
+
+    ParallelMath::Int16CompFlag isRotationMode = (ParallelMath::Equal(modeIndex, ParallelMath::MakeUInt15(4)) | ParallelMath::Equal(modeIndex, ParallelMath::MakeUInt15(5)));
+    MUInt15 channelRotation = ParallelMath::SelectOrZero(isRotationMode, auxData & ParallelMath::MakeUInt15(3));
+
+    if (!ParallelMath::AllSet(ParallelMath::Equal(channelRotation, ParallelMath::MakeUInt15(0))))
+    {
+        ParallelMath::Int16CompFlag isRRotation = ParallelMath::Equal(channelRotation, ParallelMath::MakeUInt15(1));
+        ParallelMath::Int16CompFlag isGRotation = ParallelMath::Equal(channelRotation, ParallelMath::MakeUInt15(2));
+        ParallelMath::Int16CompFlag isBRotation = ParallelMath::Equal(channelRotation, ParallelMath::MakeUInt15(3));
+
+        MUInt15 alphas[16];
+        for (int px = 0; px < 16; px++)
+            alphas[px] = pixelValues[px][3];
+
+        if (ParallelMath::AnySet(isRRotation))
+        {
+            for (int px = 0; px < 16; px++)
+            {
+                ParallelMath::ConditionalSet(pixelValues[px][3], isRRotation, pixelValues[px][0]);
+                ParallelMath::ConditionalSet(pixelValues[px][0], isRRotation, alphas[px]);
+            }
+        }
+
+        if (ParallelMath::AnySet(isGRotation))
+        {
+            for (int px = 0; px < 16; px++)
+            {
+                ParallelMath::ConditionalSet(pixelValues[px][3], isGRotation, pixelValues[px][1]);
+                ParallelMath::ConditionalSet(pixelValues[px][1], isGRotation, alphas[px]);
+            }
+        }
+
+        if (ParallelMath::AnySet(isBRotation))
+        {
+            for (int px = 0; px < 16; px++)
+            {
+                ParallelMath::ConditionalSet(pixelValues[px][3], isBRotation, pixelValues[px][2]);
+                ParallelMath::ConditionalSet(pixelValues[px][2], isBRotation, alphas[px]);
+            }
+        }
+    }
+
+    // Pack to pixel block
+    MUInt16 channelPairs[16][2];
+    for (int px = 0; px < 16; px++)
+    {
+        channelPairs[px][0] = (ParallelMath::LosslessCast<MUInt16>::Cast(pixelValues[px][1]) << 8) | ParallelMath::LosslessCast<MUInt16>::Cast(pixelValues[px][0]);
+        channelPairs[px][1] = (ParallelMath::LosslessCast<MUInt16>::Cast(pixelValues[px][3]) << 8) | ParallelMath::LosslessCast<MUInt16>::Cast(pixelValues[px][2]);
+    }
+
+    ParallelMath::UInt32 packedPixels[16];
+    for (int px = 0; px < 16; px++)
+        packedPixels[px] = ParallelMath::Interleave32(channelPairs[px][0], channelPairs[px][1]);
+
+    ParallelMath::UInt64 packedPixelsPairs[8];
+    for (int px = 0; px < 16; px += 2)
+        packedPixelsPairs[px / 2] = ParallelMath::Interleave64(packedPixels[px], packedPixels[px + 1]);
+
+    ParallelMath::UInt128 packedRows[4];
+    for (int row = 0; row < 4; row++)
+        packedRows[row] = ParallelMath::Interleave128(packedPixelsPairs[row * 2 + 0], packedPixelsPairs[row * 2 + 1]);
+
+
+    for (int blk = 0; blk < ParallelMath::ParallelSize; blk++)
+    {
+        PixelBlockU8 &outputBlock = output[blk];
+
+        for (int row = 0; row < 4; row++)
+        {
+            ParallelMath::ScalarUInt128 rowBytes = ParallelMath::Extract(packedRows[row], blk);
+
+            for (int i = 0; i < 8; i++)
+                outputBlock.m_pixels[row * 4 + i / 4][i & 3] = static_cast<uint8_t>((rowBytes.m_low >> (i * 8)) & 0xff);
+            for (int i = 0; i < 8; i++)
+                outputBlock.m_pixels[row * 4 + i / 4 + 2][i & 3] = static_cast<uint8_t>((rowBytes.m_high >> (i * 8)) & 0xff);
+        }
     }
 }
 

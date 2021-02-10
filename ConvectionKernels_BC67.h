@@ -35,7 +35,7 @@ namespace cvtt
         {
         public:
             static void Pack(uint32_t flags, const PixelBlockU8* inputs, uint8_t* packedBlocks, const float channelWeights[4], int numTweakRounds, int numRefineRounds);
-            static void UnpackOne(PixelBlockU8 &output, const uint8_t* packedBlock);
+            static void Unpack(PixelBlockU8 *output, const uint8_t* packedBlocks);
 
         private:
             static const int MaxTweakRounds = 4;
@@ -44,6 +44,7 @@ namespace cvtt
             typedef ParallelMath::UInt15 MUInt15;
             typedef ParallelMath::UInt16 MUInt16;
             typedef ParallelMath::SInt32 MSInt32;
+            typedef ParallelMath::UInt128 MUInt128;
             typedef ParallelMath::Float MFloat;
 
             static void TweakAlpha(const MUInt15 original[2], int tweak, int range, MUInt15 result[2]);

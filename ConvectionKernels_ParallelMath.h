@@ -61,12 +61,19 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 namespace cvtt
 {
+
 #ifdef CVTT_USE_SSE2
     // SSE2 version
     struct ParallelMath
     {
         typedef uint16_t ScalarUInt16;
         typedef int16_t ScalarSInt16;
+
+        struct ScalarUInt128
+        {
+            uint64_t m_low;
+            uint64_t m_high;
+        };
 
         template<unsigned int TRoundingMode>
         struct RoundForScope
@@ -200,6 +207,14 @@ namespace cvtt
                 return result;
             }
 
+            inline VInt32 operator&(const VInt32& other) const
+            {
+                VInt32 result;
+                result.m_values[0] = _mm_and_si128(m_values[0], other.m_values[0]);
+                result.m_values[1] = _mm_and_si128(m_values[1], other.m_values[1]);
+                return result;
+            }
+
             inline VInt32 operator|(const VInt32& other) const
             {
                 VInt32 result;
@@ -249,9 +264,14 @@ namespace cvtt
 #endif
         };
 
-        struct Int64
+        struct UInt64
         {
             __m128i m_values[4];
+        };
+
+        struct UInt128
+        {
+            __m128i m_values[8];
         };
 
         struct Float
@@ -360,6 +380,80 @@ namespace cvtt
                 result.m_values[0] = _mm_or_si128(m_values[0], other.m_values[0]);
                 result.m_values[1] = _mm_or_si128(m_values[1], other.m_values[1]);
                 return result;
+            }
+        };
+
+        struct Int16RightShiftMin1Bits
+        {
+            __m128i m_value;
+
+            static Int16RightShiftMin1Bits Create(int bits)
+            {
+                Int16RightShiftMin1Bits result;
+                result.m_value = _mm_set1_epi16(1 << (16 - bits));
+                return result;
+            }
+
+            void Put(int offset, int bits)
+            {
+                reinterpret_cast<uint16_t*>(&m_value)[offset] = (1 << (16 - bits));
+            }
+
+            inline void ConditionalIncrement(const Int16CompFlag &flag, int bits)
+            {
+                __m128i incremented = _mm_srli_epi16(m_value, bits);
+
+                m_value = _mm_or_si128(_mm_and_si128(flag.m_value, incremented), _mm_andnot_si128(flag.m_value, m_value));
+            }
+
+            inline Int16RightShiftMin1Bits ConditionalDecrement(const Int16CompFlag &flag, int bits)
+            {
+                __m128i decremented = _mm_slli_epi16(m_value, bits);
+
+                m_value = _mm_or_si128(_mm_and_si128(flag.m_value, decremented), _mm_andnot_si128(flag.m_value, m_value));
+            }
+        };
+
+        struct Int16LeftShiftBits
+        {
+            __m128i m_value;
+
+            static Int16LeftShiftBits Create(int bits)
+            {
+                Int16LeftShiftBits result;
+                result.m_value = _mm_set1_epi16(1 << bits);
+                return result;
+            }
+
+            inline void ConditionalIncrement(const Int16CompFlag &flag, int bits)
+            {
+                __m128i incremented = _mm_slli_epi16(m_value, bits);
+
+                m_value = _mm_or_si128(_mm_and_si128(flag.m_value, incremented), _mm_andnot_si128(flag.m_value, m_value));
+            }
+
+            inline void ConditionalDecrement(const Int16CompFlag &flag, int bits)
+            {
+                __m128i decremented = _mm_srli_epi16(m_value, bits);
+
+                m_value = _mm_or_si128(_mm_and_si128(flag.m_value, decremented), _mm_andnot_si128(flag.m_value, m_value));
+            }
+        };
+
+        struct Int32LeftShiftBitsMax15
+        {
+            __m128i m_values[2];
+
+            static Int32LeftShiftBitsMax15 Create(int bits)
+            {
+                Int32LeftShiftBitsMax15 result;
+                result.m_values[0] = result.m_values[1] = _mm_set1_epi32(1 << bits);
+                return result;
+            }
+
+            void Put(int offset, int bits)
+            {
+                reinterpret_cast<uint32_t*>(m_values + offset / 4)[offset & 3] = (1 << bits);
             }
         };
 
@@ -650,6 +744,38 @@ namespace cvtt
             return result;
         }
 
+        static UInt32 MakeUInt32(uint32_t v)
+        {
+            UInt32 result;
+            result.m_values[0] = _mm_set1_epi32(v);
+            result.m_values[1] = _mm_set1_epi32(v);
+            return result;
+        }
+
+        static UInt64 MakeUInt64(uint64_t v)
+        {
+            UInt64 result;
+            result.m_values[0] = _mm_set1_epi64x(v);
+            result.m_values[1] = _mm_set1_epi64x(v);
+            result.m_values[2] = _mm_set1_epi64x(v);
+            result.m_values[3] = _mm_set1_epi64x(v);
+            return result;
+        }
+
+        static UInt128 MakeUInt128(const ScalarUInt128 &v)
+        {
+            UInt128 result;
+            result.m_values[0] = _mm_set_epi64x(v.m_high, v.m_low);
+            result.m_values[1] = _mm_set_epi64x(v.m_high, v.m_low);
+            result.m_values[2] = _mm_set_epi64x(v.m_high, v.m_low);
+            result.m_values[3] = _mm_set_epi64x(v.m_high, v.m_low);
+            result.m_values[4] = _mm_set_epi64x(v.m_high, v.m_low);
+            result.m_values[5] = _mm_set_epi64x(v.m_high, v.m_low);
+            result.m_values[6] = _mm_set_epi64x(v.m_high, v.m_low);
+            result.m_values[7] = _mm_set_epi64x(v.m_high, v.m_low);
+            return result;
+        }
+
         static uint16_t Extract(const UInt16 &v, int offset)
         {
             return reinterpret_cast<const uint16_t*>(&v.m_value)[offset];
@@ -675,6 +801,21 @@ namespace cvtt
             return reinterpret_cast<const int32_t*>(&v.m_values[offset >> 2])[offset & 3];
         }
 
+        static uint64_t Extract(const UInt64 &v, int offset)
+        {
+            return reinterpret_cast<const int64_t*>(&v.m_values[offset >> 1])[offset & 1];
+        }
+
+        static ParallelMath::ScalarUInt128 Extract(const UInt128 &v, int offset)
+        {
+            const uint64_t *v64 = reinterpret_cast<const uint64_t *>(&v.m_values[offset]);
+
+            ParallelMath::ScalarUInt128 result;
+            result.m_low = v64[0];
+            result.m_high = v64[1];
+            return result;
+        }
+
         static float Extract(const Float &v, int offset)
         {
             return reinterpret_cast<const float*>(&v.m_values[offset >> 2])[offset & 3];
@@ -698,6 +839,21 @@ namespace cvtt
         static void PutSInt16(SInt16 &dest, int offset, int16_t v)
         {
             reinterpret_cast<int16_t*>(&dest)[offset] = v;
+        }
+
+        static void PutUInt32(UInt32 &dest, int offset, uint32_t v)
+        {
+            reinterpret_cast<uint32_t*>(&dest)[offset] = v;
+        }
+
+        static void PutUInt64(UInt64 &dest, int offset, uint64_t v)
+        {
+            reinterpret_cast<uint64_t*>(&dest)[offset] = v;
+        }
+
+        static void PutUInt128(UInt128 &dest, int offset, const ScalarUInt128 &v)
+        {
+            dest.m_values[offset] = _mm_set_epi64x(v.m_high, v.m_low);
         }
 
         static float ExtractFloat(const Float& v, int offset)
@@ -1065,6 +1221,104 @@ namespace cvtt
             return diff * diff;
         }
 
+        static UInt64 GetUInt128LowHalf(const UInt128 &v)
+        {
+            UInt64 result;
+            result.m_values[0] = _mm_unpacklo_epi64(v.m_values[0], v.m_values[1]);
+            result.m_values[1] = _mm_unpacklo_epi64(v.m_values[2], v.m_values[3]);
+            result.m_values[2] = _mm_unpacklo_epi64(v.m_values[4], v.m_values[5]);
+            result.m_values[3] = _mm_unpacklo_epi64(v.m_values[6], v.m_values[7]);
+            return result;
+        }
+
+        static UInt64 GetUInt128HighHalf(const UInt128 &v)
+        {
+            UInt64 result;
+            result.m_values[0] = _mm_unpackhi_epi64(v.m_values[0], v.m_values[1]);
+            result.m_values[1] = _mm_unpackhi_epi64(v.m_values[2], v.m_values[3]);
+            result.m_values[2] = _mm_unpackhi_epi64(v.m_values[4], v.m_values[5]);
+            result.m_values[3] = _mm_unpackhi_epi64(v.m_values[6], v.m_values[7]);
+            return result;
+        }
+
+        static UInt32 GetUInt64LowHalf(const UInt64 &v)
+        {
+            UInt32 result;
+            for (int i = 0; i < 2; i++)
+            {
+                __m128i shuf0 = _mm_shuffle_epi32(v.m_values[i * 2 + 0], _MM_SHUFFLE(3, 1, 2, 0));
+                __m128i shuf1 = _mm_shuffle_epi32(v.m_values[i * 2 + 1], _MM_SHUFFLE(3, 1, 2, 0));
+                __m128i unpacked = _mm_unpacklo_epi32(shuf0, shuf1);
+                __m128i reordered = _mm_shuffle_epi32(unpacked, _MM_SHUFFLE(3, 1, 2, 0));
+                result.m_values[i] = reordered;
+            }
+            return result;
+        }
+
+        static UInt32 GetUInt64HighHalf(const UInt64 &v)
+        {
+            UInt32 result;
+            for (int i = 0; i < 2; i++)
+            {
+                __m128i shuf0 = _mm_shuffle_epi32(v.m_values[i * 2 + 0], _MM_SHUFFLE(3, 1, 2, 0));
+                __m128i shuf1 = _mm_shuffle_epi32(v.m_values[i * 2 + 1], _MM_SHUFFLE(3, 1, 2, 0));
+                __m128i unpacked = _mm_unpackhi_epi32(shuf0, shuf1);
+                __m128i reordered = _mm_shuffle_epi32(unpacked, _MM_SHUFFLE(3, 1, 2, 0));
+                result.m_values[i] = reordered;
+            }
+            return result;
+        }
+
+        static UInt16 GetUInt32LowHalf(const UInt32 &v)
+        {
+            UInt16 result;
+            __m128i sx0 = _mm_srai_epi32(_mm_slli_si128(v.m_values[0], 2), 16);
+            __m128i sx1 = _mm_srai_epi32(_mm_slli_si128(v.m_values[1], 2), 16);
+            __m128i packed = _mm_packs_epi32(sx0, sx1);
+            result.m_value = packed;
+            return result;
+        }
+
+        static UInt16 GetUInt32HighHalf(const UInt32 &v)
+        {
+            UInt16 result;
+            __m128i sx0 = _mm_srai_epi32(v.m_values[0], 16);
+            __m128i sx1 = _mm_srai_epi32(v.m_values[1], 16);
+            __m128i packed = _mm_packs_epi32(sx0, sx1);
+            result.m_value = packed;
+            return result;
+        }
+
+        static UInt32 Interleave32(const UInt16 &low, const UInt16 &high)
+        {
+            UInt32 result;
+            result.m_values[0] = _mm_unpacklo_epi16(low.m_value, high.m_value);
+            result.m_values[1] = _mm_unpackhi_epi16(low.m_value, high.m_value);
+            return result;
+        }
+
+        static UInt64 Interleave64(const UInt32 &low, const UInt32 &high)
+        {
+            UInt64 result;
+            for (int i = 0; i < 2; i++)
+            {
+                result.m_values[i * 2 + 0] = _mm_unpacklo_epi32(low.m_values[i], high.m_values[i]);
+                result.m_values[i * 2 + 1] = _mm_unpackhi_epi32(low.m_values[i], high.m_values[i]);
+            }
+            return result;
+        }
+
+        static UInt128 Interleave128(const UInt64 &low, const UInt64 &high)
+        {
+            UInt128 result;
+            for (int i = 0; i < 4; i++)
+            {
+                result.m_values[i * 2 + 0] = _mm_unpacklo_epi64(low.m_values[i], high.m_values[i]);
+                result.m_values[i * 2 + 1] = _mm_unpackhi_epi64(low.m_values[i], high.m_values[i]);
+            }
+            return result;
+        }
+
         static UInt16 RightShift(const UInt16 &v, int bits)
         {
             UInt16 result;
@@ -1091,6 +1345,79 @@ namespace cvtt
         {
             UInt15 result;
             result.m_value = _mm_srli_epi16(v.m_value, bits);
+            return result;
+        }
+
+        static UInt15 VRightShiftMin1(const UInt15 &v, const Int16RightShiftMin1Bits &bits)
+        {
+            UInt15 result;
+            result.m_value = _mm_mulhi_epu16(v.m_value, bits.m_value);
+            return result;
+        }
+
+        static UInt16 VRightShiftMin1(const UInt16 &v, const Int16RightShiftMin1Bits &bits)
+        {
+            UInt16 result;
+            result.m_value = _mm_mulhi_epu16(v.m_value, bits.m_value);
+            return result;
+        }
+
+        static UInt128 VRightShift(const UInt128 &v, const int *bits)
+        {
+            UInt128 result;
+            for (int i = 0; i < 8; i++)
+            {
+                int laneBits = bits[i];
+                __m128i rShift = _mm_set_epi32(0, 0, 0, laneBits);
+                __m128i lShift = _mm_set_epi32(0, 0, 0, 64 - laneBits);
+
+                __m128i lowBits = _mm_srl_epi64(v.m_values[i], rShift);
+                __m128i highBits = _mm_srli_si128(_mm_sll_epi64(v.m_values[i], lShift), 8);
+
+                result.m_values[i] = _mm_or_si128(lowBits, highBits);
+            }
+            return result;
+        }
+
+        static UInt64 VRightShift(const UInt64 &v, const int *bits)
+        {
+            UInt64 result;
+            for (int i = 0; i < 8; i++)
+            {
+                const int elementIndex = (i >> 1);
+                const int subIndex = (i & 1);
+                reinterpret_cast<uint64_t*>(result.m_values + elementIndex)[subIndex] = reinterpret_cast<const uint64_t*>(v.m_values + elementIndex)[subIndex] >> bits[i];
+            }
+            return result;
+        }
+
+        static UInt15 VLeftShift(const UInt15 &v, const Int16LeftShiftBits &bits)
+        {
+            UInt15 result;
+            result.m_value = _mm_mullo_epi16(v.m_value, bits.m_value);
+            return result;
+        }
+
+        static UInt16 VLeftShift(const UInt16 &v, const Int16LeftShiftBits &bits)
+        {
+            UInt16 result;
+            result.m_value = _mm_mullo_epi16(v.m_value, bits.m_value);
+            return result;
+        }
+
+        static UInt31 VLeftShift(const UInt31 &v, const Int32LeftShiftBitsMax15 &bits)
+        {
+            // This sucks, SSE4.1 has _mm_mullo_epi32 which would be a lot better for this
+            UInt31 result;
+            for (int i = 0; i < 2; i++)
+            {
+                __m128i lowMul = _mm_mullo_epi16(v.m_values[i], bits.m_values[i]);
+                __m128i highMul = _mm_mullo_epi16(v.m_values[i], _mm_slli_si128(bits.m_values[i], 2));
+                __m128i carryBase = _mm_mulhi_epu16(v.m_values[i], bits.m_values[i]);
+                __m128i carry = _mm_slli_si128(_mm_mulhi_epu16(v.m_values[i], bits.m_values[i]), 2);
+                result.m_values[i] = _mm_or_si128(_mm_or_si128(lowMul, highMul), carry);
+            }
+
             return result;
         }
 

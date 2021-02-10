@@ -9,6 +9,19 @@ namespace cvtt
     namespace Internal
     {
         extern const ParallelMath::UInt16 g_weightReciprocals[17];
+        extern const uint16_t g_weightReciprocalsScalar[17];
+
+        static void ReconstructLDR_BC7_Static(const ParallelMath::UInt15 &index, const ParallelMath::UInt15 *ep0, const ParallelMath::UInt15 *ep1, const ParallelMath::UInt16 &weightRcp, ParallelMath::UInt15* pixel, int numRealChannels)
+        {
+            ParallelMath::UInt15 weight = ParallelMath::LosslessCast<ParallelMath::UInt15>::Cast(ParallelMath::RightShift(ParallelMath::CompactMultiply(weightRcp, index) + 256, 9));
+
+            for (int ch = 0; ch < numRealChannels; ch++)
+            {
+                ParallelMath::UInt15 ep0f = ParallelMath::LosslessCast<ParallelMath::UInt15>::Cast(ParallelMath::CompactMultiply((ParallelMath::MakeUInt15(64) - weight), ParallelMath::LosslessCast<ParallelMath::UInt15>::Cast(ep0[ch])));
+                ParallelMath::UInt15 ep1f = ParallelMath::LosslessCast<ParallelMath::UInt15>::Cast(ParallelMath::CompactMultiply(weight, ParallelMath::LosslessCast<ParallelMath::UInt15>::Cast(ep1[ch])));
+                pixel[ch] = ParallelMath::LosslessCast<ParallelMath::UInt15>::Cast(ParallelMath::RightShift(ep0f + ep1f + ParallelMath::MakeUInt15(32), 6));
+            }
+        }
 
         template<int TVectorSize>
         class IndexSelector
