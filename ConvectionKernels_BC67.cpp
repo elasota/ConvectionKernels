@@ -2308,10 +2308,7 @@ void cvtt::Internal::BC7Computer::Pack(uint32_t flags, const PixelBlockU8* input
 
 void cvtt::Internal::BC7Computer::Unpack(PixelBlockU8 *output, const uint8_t* packedBlocks)
 {
-    ParallelMath::ScalarUInt128 zero;
-    zero.m_low = zero.m_high = 0;
-
-    MUInt128 bulkBits = ParallelMath::MakeUInt128(zero);
+    MUInt128 bulkBits;
 
     ParallelMath::UInt16 firstWord;
 
@@ -2319,25 +2316,15 @@ void cvtt::Internal::BC7Computer::Unpack(PixelBlockU8 *output, const uint8_t* pa
     {
         const uint8_t *blockStart = packedBlocks + blk * 16;
 
-        ParallelMath::ScalarUInt128 blockBits;
-
         if (blockStart[0] == 0)
         {
             // Block is corrupt, zero-fill the block
-            blockBits.m_low = static_cast<uint64_t>(1) << 6;
-            blockBits.m_high = 0;
+            static const uint8_t emptyBlock[16] = { 0x40, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+            ParallelMath::LoadUInt128LE(bulkBits, blk, emptyBlock);
         }
         else
-        {
-            blockBits.m_low = 0;
-            blockBits.m_high = 0;
-            for (int bi = 0; bi < 8; bi++)
-                blockBits.m_low |= static_cast<uint64_t>(blockStart[bi]) << (8 * bi);
-            for (int bi = 0; bi < 8; bi++)
-                blockBits.m_high |= static_cast<uint64_t>(blockStart[bi + 8]) << (8 * bi);
-        }
+            ParallelMath::LoadUInt128LE(bulkBits, blk, blockStart);
 
-        ParallelMath::PutUInt128(bulkBits, blk, blockBits);
         ParallelMath::PutUInt16(firstWord, blk, static_cast<uint16_t>((blockStart[1] << 8) | blockStart[0]));
     }
 
@@ -2365,13 +2352,12 @@ void cvtt::Internal::BC7Computer::Unpack(PixelBlockU8 *output, const uint8_t* pa
 
     const int modeAuxBitsCount[8] = { 4, 6, 6, 6, 3, 2, 0, 6 };
 
-    MUInt128 endpointBits = ParallelMath::MakeUInt128(zero);
-    MUInt128 indexBits = ParallelMath::MakeUInt128(zero);
-
-    int numHeaderBits[ParallelMath::ParallelSize];
-    int numRGBChannelEndpointBits[ParallelMath::ParallelSize];
-    int numAlphaEndpointBits[ParallelMath::ParallelSize];
-    int numParityBits[ParallelMath::ParallelSize];
+    ParallelMath::UInt128RightShiftBits numHeaderBits;
+    ParallelMath::UInt128RightShiftBits numRGBChannelEndpointBits;
+    ParallelMath::UInt128RightShiftBits numAlphaEndpointBits;
+    ParallelMath::UInt128RightShiftBits numParityBits;
+    ParallelMath::UInt128RightShiftBits numRGBIndexBits;
+    ParallelMath::UInt128RightShiftBits numAlphaIndexBits;
     int halfPointToAlphaOffset[ParallelMath::ParallelSize];
 
     MUInt15 rgbEndpointMask;
@@ -2401,32 +2387,33 @@ void cvtt::Internal::BC7Computer::Unpack(PixelBlockU8 *output, const uint8_t* pa
 
         const BC7Data::BC7ModeInfo &modeInfo = BC7Data::g_modes[elementModeIndex];
 
-        numHeaderBits[blk] = elementModeIndex + 1 + modeAuxBitsCount[elementModeIndex];
-        numRGBChannelEndpointBits[blk] = modeInfo.m_rgbBits * 2 * modeInfo.m_numSubsets;
-        numAlphaEndpointBits[blk] = modeInfo.m_alphaBits * 2 * modeInfo.m_numSubsets;
+        numHeaderBits.Put(blk, elementModeIndex + 1 + modeAuxBitsCount[elementModeIndex]);
+        numRGBChannelEndpointBits.Put(blk, modeInfo.m_rgbBits * 2 * modeInfo.m_numSubsets);
+        numAlphaEndpointBits.Put(blk, modeInfo.m_alphaBits * 2 * modeInfo.m_numSubsets);
 
         int rgbExpansionBits = modeInfo.m_rgbBits;
         int alphaExpansionBits = modeInfo.m_alphaBits;
 
         if (modeInfo.m_pBitMode == BC7Data::PBitMode_None)
         {
-            numParityBits[blk] = 0;
+            numParityBits.Put(blk, 0);
         }
         else if (modeInfo.m_pBitMode == BC7Data::PBitMode_PerEndpoint)
         {
-            numParityBits[blk] = modeInfo.m_numSubsets * 2;
+            numParityBits.Put(blk, modeInfo.m_numSubsets * 2);
             rgbExpansionBits++;
             alphaExpansionBits++;
             ParallelMath::PutBoolInt16(hasParityBits, blk, true);
         }
         else if (modeInfo.m_pBitMode == BC7Data::PBitMode_PerSubset)
         {
-            numParityBits[blk] = modeInfo.m_numSubsets;
+            numParityBits.Put(blk, modeInfo.m_numSubsets);
             rgbExpansionBits++;
             alphaExpansionBits++;
             ParallelMath::PutBoolInt16(hasParityBits, blk, true);
         }
 
+        numRGBIndexBits.Put(blk, modeInfo.m_indexBits * 16 - modeInfo.m_numSubsets);
         halfPointToAlphaOffset[blk] = 0;
 
         if (modeInfo.m_alphaIndexBits != 0)
@@ -2566,13 +2553,18 @@ void cvtt::Internal::BC7Computer::Unpack(PixelBlockU8 *output, const uint8_t* pa
             }
         }
 
-        int rgbRange = blockHasIndexRotation ? (1 << modeInfo.m_alphaIndexBits) : (1 << modeInfo.m_indexBits);
-        int alphaRange = blockHasIndexRotation ? (1 << modeInfo.m_indexBits) : (1 << modeInfo.m_alphaIndexBits);
-
-        ParallelMath::PutUInt16(rgbWeightReciprocal, blk, g_weightReciprocalsScalar[rgbRange]);
-        ParallelMath::PutUInt16(alphaWeightReciprocal, blk, g_weightReciprocalsScalar[alphaRange]);
+        if (blockHasIndexRotation)
+        {
+            ParallelMath::PutUInt16(rgbWeightReciprocal, blk, g_weightReciprocalsScalar[1 << modeInfo.m_alphaIndexBits]);
+            ParallelMath::PutUInt16(alphaWeightReciprocal, blk, g_weightReciprocalsScalar[1 << modeInfo.m_indexBits]);
+        }
+        else
+        {
+            ParallelMath::PutUInt16(rgbWeightReciprocal, blk, g_weightReciprocalsScalar[1 << modeInfo.m_indexBits]);
+            ParallelMath::PutUInt16(alphaWeightReciprocal, blk, g_weightReciprocalsScalar[1 << modeInfo.m_alphaIndexBits]);
+        }
     }
-    
+
     MUInt15 planeIndexes[2][16];
 
     for (int plane = 0; plane < maxPlanes; plane++)
@@ -2747,12 +2739,12 @@ void cvtt::Internal::BC7Computer::Unpack(PixelBlockU8 *output, const uint8_t* pa
     }
 
     // Pixel 0 is always subset 0
-    ReconstructLDR_BC7_Static(planeIndexes[0][0], endpoints[0][0], endpoints[0][1], rgbWeightReciprocal, pixelValues[0], maxCoherentChannels);
+    IndexSelector<4>::ReconstructLDR_BC7_Static(planeIndexes[0][0], endpoints[0][0], endpoints[0][1], rgbWeightReciprocal, pixelValues[0], maxCoherentChannels);
 
     if (maxSubsets == 1)
     {
         for (int px = 1; px < 16; px++)
-            ReconstructLDR_BC7_Static(planeIndexes[0][px], endpoints[0][0], endpoints[0][1], rgbWeightReciprocal, pixelValues[px], maxCoherentChannels);
+            IndexSelector<3>::ReconstructLDR_BC7_Static(planeIndexes[0][px], endpoints[0][0], endpoints[0][1], rgbWeightReciprocal, pixelValues[px], maxCoherentChannels);
     }
     else if (maxSubsets == 2)
     {
@@ -2773,7 +2765,7 @@ void cvtt::Internal::BC7Computer::Unpack(PixelBlockU8 *output, const uint8_t* pa
                 for (int epi = 0; epi < 2; epi++)
                     partitionedEPs[epi][ch] = ParallelMath::Select(isPart1, endpoints[1][epi][ch], endpoints[0][epi][ch]);
 
-            ReconstructLDR_BC7_Static(planeIndexes[0][px], partitionedEPs[0], partitionedEPs[1], rgbWeightReciprocal, pixelValues[px], maxCoherentChannels);
+            IndexSelector<3>::ReconstructLDR_BC7_Static(planeIndexes[0][px], partitionedEPs[0], partitionedEPs[1], rgbWeightReciprocal, pixelValues[px], maxCoherentChannels);
         }
     }
     else if (maxSubsets == 3)
@@ -2801,7 +2793,7 @@ void cvtt::Internal::BC7Computer::Unpack(PixelBlockU8 *output, const uint8_t* pa
                 }
             }
 
-            ReconstructLDR_BC7_Static(planeIndexes[0][px], partitionedEPs[0], partitionedEPs[1], rgbWeightReciprocal, pixelValues[px], maxCoherentChannels);
+            IndexSelector<3>::ReconstructLDR_BC7_Static(planeIndexes[0][px], partitionedEPs[0], partitionedEPs[1], rgbWeightReciprocal, pixelValues[px], maxCoherentChannels);
         }
     }
 
@@ -2811,7 +2803,7 @@ void cvtt::Internal::BC7Computer::Unpack(PixelBlockU8 *output, const uint8_t* pa
         for (int px = 0; px < 16; px++)
         {
             MUInt15 alpha;
-            ReconstructLDR_BC7_Static(alphaPlaneIndexes[px], endpoints[0][0] + 3, endpoints[0][1] + 3, alphaWeightReciprocal, &alpha, 1);
+            IndexSelector<3>::ReconstructLDR_BC7_Static(alphaPlaneIndexes[px], endpoints[0][0] + 3, endpoints[0][1] + 3, alphaWeightReciprocal, &alpha, 1);
             ParallelMath::ConditionalSet(pixelValues[px][3], isDualPlane, alpha);
         }
     }
@@ -2880,17 +2872,8 @@ void cvtt::Internal::BC7Computer::Unpack(PixelBlockU8 *output, const uint8_t* pa
 
     for (int blk = 0; blk < ParallelMath::ParallelSize; blk++)
     {
-        PixelBlockU8 &outputBlock = output[blk];
-
         for (int row = 0; row < 4; row++)
-        {
-            ParallelMath::ScalarUInt128 rowBytes = ParallelMath::Extract(packedRows[row], blk);
-
-            for (int i = 0; i < 8; i++)
-                outputBlock.m_pixels[row * 4 + i / 4][i & 3] = static_cast<uint8_t>((rowBytes.m_low >> (i * 8)) & 0xff);
-            for (int i = 0; i < 8; i++)
-                outputBlock.m_pixels[row * 4 + i / 4 + 2][i & 3] = static_cast<uint8_t>((rowBytes.m_high >> (i * 8)) & 0xff);
-        }
+            ParallelMath::StoreUInt128LE(reinterpret_cast<uint8_t*>(output[blk].m_pixels + 4 * row), packedRows[row], blk);
     }
 }
 

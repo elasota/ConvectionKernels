@@ -71,8 +71,7 @@ namespace cvtt
 
         struct ScalarUInt128
         {
-            uint64_t m_low;
-            uint64_t m_high;
+            __m128i m_value;
         };
 
         template<unsigned int TRoundingMode>
@@ -411,6 +410,16 @@ namespace cvtt
                 __m128i decremented = _mm_slli_epi16(m_value, bits);
 
                 m_value = _mm_or_si128(_mm_and_si128(flag.m_value, decremented), _mm_andnot_si128(flag.m_value, m_value));
+            }
+        };
+
+        struct UInt128RightShiftBits
+        {
+            __m128i m_values[8];
+
+            void Put(int offset, int bits)
+            {
+                m_values[offset] = _mm_set_epi32(0, 64 - bits, 0, bits);
             }
         };
 
@@ -762,20 +771,6 @@ namespace cvtt
             return result;
         }
 
-        static UInt128 MakeUInt128(const ScalarUInt128 &v)
-        {
-            UInt128 result;
-            result.m_values[0] = _mm_set_epi64x(v.m_high, v.m_low);
-            result.m_values[1] = _mm_set_epi64x(v.m_high, v.m_low);
-            result.m_values[2] = _mm_set_epi64x(v.m_high, v.m_low);
-            result.m_values[3] = _mm_set_epi64x(v.m_high, v.m_low);
-            result.m_values[4] = _mm_set_epi64x(v.m_high, v.m_low);
-            result.m_values[5] = _mm_set_epi64x(v.m_high, v.m_low);
-            result.m_values[6] = _mm_set_epi64x(v.m_high, v.m_low);
-            result.m_values[7] = _mm_set_epi64x(v.m_high, v.m_low);
-            return result;
-        }
-
         static uint16_t Extract(const UInt16 &v, int offset)
         {
             return reinterpret_cast<const uint16_t*>(&v.m_value)[offset];
@@ -806,14 +801,9 @@ namespace cvtt
             return reinterpret_cast<const int64_t*>(&v.m_values[offset >> 1])[offset & 1];
         }
 
-        static ParallelMath::ScalarUInt128 Extract(const UInt128 &v, int offset)
+        static void StoreUInt128LE(uint8_t *v, const UInt128 &src, int offset)
         {
-            const uint64_t *v64 = reinterpret_cast<const uint64_t *>(&v.m_values[offset]);
-
-            ParallelMath::ScalarUInt128 result;
-            result.m_low = v64[0];
-            result.m_high = v64[1];
-            return result;
+            _mm_storeu_si128(reinterpret_cast<__m128i*>(v), src.m_values[offset]);
         }
 
         static float Extract(const Float &v, int offset)
@@ -851,14 +841,9 @@ namespace cvtt
             reinterpret_cast<uint64_t*>(&dest)[offset] = v;
         }
 
-        static void PutUInt128(UInt128 &dest, int offset, const ScalarUInt128 &v)
+        static void LoadUInt128LE(UInt128 &dest, int offset, const uint8_t *v)
         {
-            dest.m_values[offset] = _mm_set_epi64x(v.m_high, v.m_low);
-        }
-
-        static float ExtractFloat(const Float& v, int offset)
-        {
-            return reinterpret_cast<const float*>(&v)[offset];
+            dest.m_values[offset] = _mm_loadu_si128(reinterpret_cast<const __m128i*>(v));
         }
 
         static void PutFloat(Float &dest, int offset, float v)
@@ -1362,14 +1347,14 @@ namespace cvtt
             return result;
         }
 
-        static UInt128 VRightShift(const UInt128 &v, const int *bits)
+        static UInt128 VRightShift(const UInt128 &v, const UInt128RightShiftBits &bits)
         {
             UInt128 result;
             for (int i = 0; i < 8; i++)
             {
-                int laneBits = bits[i];
-                __m128i rShift = _mm_set_epi32(0, 0, 0, laneBits);
-                __m128i lShift = _mm_set_epi32(0, 0, 0, 64 - laneBits);
+                __m128i bitsPair = bits.m_values[i];
+                __m128i rShift = bitsPair;
+                __m128i lShift = _mm_srli_si128(bitsPair, 8);
 
                 __m128i lowBits = _mm_srl_epi64(v.m_values[i], rShift);
                 __m128i highBits = _mm_srli_si128(_mm_sll_epi64(v.m_values[i], lShift), 8);
