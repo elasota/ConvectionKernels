@@ -1075,7 +1075,7 @@ void cvtt::Internal::BC7Computer::TrySinglePlane(uint32_t flags, const MUInt15 p
     // Mode 7 is almost never selected for RGB blocks because mode 4 has very accurate 7.7.7.1 endpoints
     // and its parity bit doesn't affect alpha, meaning mode 7 can only be better in extremely specific
     // situations, and only by at most 1 unit of error per pixel.
-    bool allowMode7 = anyBlockHasAlpha || encodingPlan.canUseMode7ForRGB;
+    bool allowMode7 = anyBlockHasAlpha || (encodingPlan.mode7RGBPartitionEnabled != 0);
 
     MFloat preWeightedPixels[16][4];
 

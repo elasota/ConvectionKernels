@@ -153,7 +153,6 @@ namespace cvtt
         uint8_t mode4SP[4][2];
         uint8_t mode5SP[4];
         bool mode6Enabled;
-        bool canUseMode7ForRGB;
 
         uint8_t seedPointsForShapeRGB[kNumRGBShapes];
         uint8_t seedPointsForShapeRGBA[kNumRGBAShapes];
@@ -196,8 +195,6 @@ namespace cvtt
 
                 this->mode5SP[i] = 4;
             }
-
-            this->canUseMode7ForRGB = false;
         }
     };
 
