@@ -34,7 +34,7 @@ namespace cvtt
         class BC7Computer
         {
         public:
-            static void Pack(uint32_t flags, const PixelBlockU8* inputs, uint8_t* packedBlocks, const float channelWeights[4], int numTweakRounds, int numRefineRounds);
+            static void Pack(uint32_t flags, const PixelBlockU8* inputs, uint8_t* packedBlocks, const float channelWeights[4], const BC7EncodingPlan &encodingPlan, int numRefineRounds);
             static void UnpackOne(PixelBlockU8 &output, const uint8_t* packedBlock);
 
         private:
@@ -59,8 +59,8 @@ namespace cvtt
             static void CompressEndpoints6(MUInt15 ep[2][4], uint16_t p[2]);
             static void CompressEndpoints7(MUInt15 ep[2][4], uint16_t p[2]);
             static void TrySingleColorRGBAMultiTable(uint32_t flags, const MUInt15 pixels[16][4], const MFloat average[4], int numRealChannels, const uint8_t *fragmentStart, int shapeLength, const MFloat &staticAlphaError, const ParallelMath::Int16CompFlag punchThroughInvalid[4], MFloat& shapeBestError, MUInt15 shapeBestEP[2][4], MUInt15 *fragmentBestIndexes, const float *channelWeightsSq, const cvtt::Tables::BC7SC::Table*const* tables, int numTables, const ParallelMath::RoundTowardNearestForScope *rtn);
-            static void TrySinglePlane(uint32_t flags, const MUInt15 pixels[16][4], const MFloat floatPixels[16][4], const float channelWeights[4], int numTweakRounds, int numRefineRounds, BC67::WorkInfo& work, const ParallelMath::RoundTowardNearestForScope *rtn);
-            static void TryDualPlane(uint32_t flags, const MUInt15 pixels[16][4], const MFloat floatPixels[16][4], const float channelWeights[4], int numTweakRounds, int numRefineRounds, BC67::WorkInfo& work, const ParallelMath::RoundTowardNearestForScope *rtn);
+            static void TrySinglePlane(uint32_t flags, const MUInt15 pixels[16][4], const MFloat floatPixels[16][4], const float channelWeights[4], const BC7EncodingPlan &encodingPlan, int numRefineRounds, BC67::WorkInfo& work, const ParallelMath::RoundTowardNearestForScope *rtn);
+            static void TryDualPlane(uint32_t flags, const MUInt15 pixels[16][4], const MFloat floatPixels[16][4], const float channelWeights[4], const BC7EncodingPlan &encodingPlan, int numRefineRounds, BC67::WorkInfo& work, const ParallelMath::RoundTowardNearestForScope *rtn);
 
             template<class T>
             static void Swap(T& a, T& b);

@@ -38,6 +38,7 @@ http://go.microsoft.com/fwlink/?LinkId=248926
 
 #include "ConvectionKernels_AggregatedError.h"
 #include "ConvectionKernels_BCCommon.h"
+#include "ConvectionKernels_BC7_Prio.h"
 #include "ConvectionKernels_BC7_SingleColor.h"
 #include "ConvectionKernels_BC6H_IO.h"
 #include "ConvectionKernels_EndpointRefiner.h"
@@ -555,32 +556,6 @@ namespace cvtt
                 0,
             };
 
-            static const int g_shapeList1Collapse[] =
-            {
-                0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-                -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-                -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-                -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-                -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-                -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-                -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-                -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-                -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-                -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-                -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-                -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-                -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-                -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-                -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-                -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-                -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-                -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-                -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-                -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-                -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-                -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-                -1,
-            };
             static const int g_shapeList2[] =
             {
                 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,
@@ -595,32 +570,6 @@ namespace cvtt
                 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110,
                 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121,
                 122, 123, 124, 125, 126, 127, 128,
-            };
-            static const int g_shapeList2Collapse[] =
-            {
-                -1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
-                10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
-                21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31,
-                32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42,
-                43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53,
-                54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64,
-                65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75,
-                76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86,
-                87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97,
-                98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108,
-                109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119,
-                120, 121, 122, 123, 124, 125, 126, 127, -1, -1, -1,
-                -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-                -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-                -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-                -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-                -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-                -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-                -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-                -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-                -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-                -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-                -1,
             };
 
             static const int g_shapeList12[] =
@@ -637,33 +586,6 @@ namespace cvtt
                 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109,
                 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120,
                 121, 122, 123, 124, 125, 126, 127, 128,
-            };
-
-            static const int g_shapeList12Collapse[] =
-            {
-                0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
-                11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21,
-                22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32,
-                33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43,
-                44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54,
-                55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65,
-                66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76,
-                77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87,
-                88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98,
-                99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109,
-                110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120,
-                121, 122, 123, 124, 125, 126, 127, 128, -1, -1, -1,
-                -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-                -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-                -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-                -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-                -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-                -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-                -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-                -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-                -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-                -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-                -1,
             };
 
             static const int g_shapeList3[] =
@@ -683,66 +605,12 @@ namespace cvtt
                 235, 236, 237, 238, 239, 240, 241, 242,
             };
 
-            static const int g_shapeList3Collapse[] =
-            {
-                -1, 0, 1, -1, 2, -1, 3, -1, 4, -1, -1,
-                -1, 5, -1, 6, -1, -1, -1, 7, 8, 9, -1,
-                -1, -1, -1, -1, -1, -1, -1, 10, -1, -1, -1,
-                11, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-                -1, -1, -1, -1, -1, -1, -1, 12, -1, -1, 13,
-                -1, -1, -1, -1, 14, -1, -1, -1, 15, -1, -1,
-                16, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-                -1, 17, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-                -1, -1, -1, 18, -1, -1, -1, -1, 19, -1, -1,
-                -1, -1, -1, -1, -1, -1, -1, 20, -1, -1, 21,
-                22, 23, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-                -1, -1, 24, -1, -1, -1, -1, 25, 26, 27, 28,
-                29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
-                40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50,
-                51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61,
-                62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72,
-                73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83,
-                84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94,
-                95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105,
-                106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116,
-                117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127,
-                128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138,
-                139,
-            };
-
             static const int g_shapeList3Short[] =
             {
                 1, 2, 4, 6, 18, 20, 33, 51, 59, 66, 96,
                 106, 110, 123, 131, 132, 136, 142, 143, 146, 148, 160,
                 171, 175, 177, 178, 186, 187, 195, 205, 211, 212, 232,
                 233, 237, 240,
-            };
-
-            static const int g_shapeList3ShortCollapse[] =
-            {
-                -1, 0, 1, -1, 2, -1, 3, -1, -1, -1, -1,
-                -1, -1, -1, -1, -1, -1, -1, 4, -1, 5, -1,
-                -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-                6, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-                -1, -1, -1, -1, -1, -1, -1, 7, -1, -1, -1,
-                -1, -1, -1, -1, 8, -1, -1, -1, -1, -1, -1,
-                9, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-                -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-                -1, -1, -1, -1, -1, -1, -1, -1, 10, -1, -1,
-                -1, -1, -1, -1, -1, -1, -1, 11, -1, -1, -1,
-                12, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-                -1, -1, 13, -1, -1, -1, -1, -1, -1, -1, 14,
-                15, -1, -1, -1, 16, -1, -1, -1, -1, -1, 17,
-                18, -1, -1, 19, -1, 20, -1, -1, -1, -1, -1,
-                -1, -1, -1, -1, -1, -1, 21, -1, -1, -1, -1,
-                -1, -1, -1, -1, -1, -1, 22, -1, -1, -1, 23,
-                -1, 24, 25, -1, -1, -1, -1, -1, -1, -1, 26,
-                27, -1, -1, -1, -1, -1, -1, -1, 28, -1, -1,
-                -1, -1, -1, -1, -1, -1, -1, 29, -1, -1, -1,
-                -1, -1, 30, 31, -1, -1, -1, -1, -1, -1, -1,
-                -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-                -1, 32, 33, -1, -1, -1, 34, -1, -1, 35, -1,
-                -1,
             };
 
             static const int g_shapeListAll[] =
@@ -779,8 +647,6 @@ namespace cvtt
             static const int g_numShapes3Short = sizeof(g_shapeList3Short) / sizeof(g_shapeList3Short[0]);
             static const int g_numShapesAll = sizeof(g_shapeListAll) / sizeof(g_shapeListAll[0]);
             static const int g_numFragments = sizeof(g_fragments) / sizeof(g_fragments[0]);
-
-            static const int g_maxFragmentsPerMode = (g_numShapes2 > g_numShapes3) ? g_numShapes2 : g_numShapes3;
         }
 
         struct PackingVector
@@ -940,8 +806,8 @@ namespace cvtt
             UnfinishedEndpoints<4> unfinishedRGBA[BC7Data::g_numShapes12];
 
             ParallelMath::UInt15 fragmentBestIndexes[BC7Data::g_numFragments];
-            ParallelMath::UInt15 shapeBestEP[BC7Data::g_maxFragmentsPerMode][2][4];
-            ParallelMath::Float shapeBestError[BC7Data::g_maxFragmentsPerMode];
+            ParallelMath::UInt15 shapeBestEP[BC7Data::g_numShapesAll][2][4];
+            ParallelMath::Float shapeBestError[BC7Data::g_numShapesAll];
         };
     }
 }
@@ -1173,15 +1039,10 @@ void cvtt::Internal::BC7Computer::TrySingleColorRGBAMultiTable(uint32_t flags, c
     }
 }
 
-void cvtt::Internal::BC7Computer::TrySinglePlane(uint32_t flags, const MUInt15 pixels[16][4], const MFloat floatPixels[16][4], const float channelWeights[4], int numTweakRounds, int numRefineRounds, BC67::WorkInfo& work, const ParallelMath::RoundTowardNearestForScope *rtn)
+void cvtt::Internal::BC7Computer::TrySinglePlane(uint32_t flags, const MUInt15 pixels[16][4], const MFloat floatPixels[16][4], const float channelWeights[4], const BC7EncodingPlan &encodingPlan, int numRefineRounds, BC67::WorkInfo& work, const ParallelMath::RoundTowardNearestForScope *rtn)
 {
     if (numRefineRounds < 1)
         numRefineRounds = 1;
-
-    if (numTweakRounds < 1)
-        numTweakRounds = 1;
-    else if (numTweakRounds > MaxTweakRounds)
-        numTweakRounds = MaxTweakRounds;
 
     float channelWeightsSq[4];
 
@@ -1214,41 +1075,17 @@ void cvtt::Internal::BC7Computer::TrySinglePlane(uint32_t flags, const MUInt15 p
     // Mode 7 is almost never selected for RGB blocks because mode 4 has very accurate 7.7.7.1 endpoints
     // and its parity bit doesn't affect alpha, meaning mode 7 can only be better in extremely specific
     // situations, and only by at most 1 unit of error per pixel.
-    bool allowMode7 = anyBlockHasAlpha;
+    bool allowMode7 = anyBlockHasAlpha || encodingPlan.canUseMode7ForRGB;
 
     MFloat preWeightedPixels[16][4];
 
     BCCommon::PreWeightPixelsLDR<4>(preWeightedPixels, pixels, channelWeights);
 
-    const int *rgbInitialEPCollapseList = NULL;
-
     // Get initial RGB endpoints
     if (allowRGBModes)
     {
-        const int *shapeList;
-        int numShapesToEvaluate;
-
-        if (flags & Flags::BC7_EnablePartitioning)
-        {
-            if (flags & Flags::BC7_Enable3Subsets)
-            {
-                shapeList = BC7Data::g_shapeListAll;
-                rgbInitialEPCollapseList = BC7Data::g_shapeListAll;
-                numShapesToEvaluate = BC7Data::g_numShapesAll;
-            }
-            else
-            {
-                shapeList = BC7Data::g_shapeList12;
-                rgbInitialEPCollapseList = BC7Data::g_shapeList12Collapse;
-                numShapesToEvaluate = BC7Data::g_numShapes12;
-            }
-        }
-        else
-        {
-            shapeList = BC7Data::g_shapeList1;
-            rgbInitialEPCollapseList = BC7Data::g_shapeList1Collapse;
-            numShapesToEvaluate = BC7Data::g_numShapes1;
-        }
+        const uint8_t *shapeList = encodingPlan.rgbShapeList;
+        int numShapesToEvaluate = encodingPlan.rgbNumShapesToEvaluate;
 
         for (int shapeIter = 0; shapeIter < numShapesToEvaluate; shapeIter++)
         {
@@ -1268,16 +1105,14 @@ void cvtt::Internal::BC7Computer::TrySinglePlane(uint32_t flags, const MUInt15 p
                 }
                 epSelector.FinishPass(epPass);
             }
-            temps.unfinishedRGB[shapeIter] = epSelector.GetEndpoints(channelWeights);
+            temps.unfinishedRGB[shape] = epSelector.GetEndpoints(channelWeights);
         }
     }
 
-    const int *rgbaInitialEPCollapseList = BC7Data::g_shapeList12Collapse;
-
     // Get initial RGBA endpoints
     {
-        const int *shapeList = BC7Data::g_shapeList12;
-        int numShapesToEvaluate = BC7Data::g_numShapes12;
+        const uint8_t *shapeList = encodingPlan.rgbaShapeList;
+        int numShapesToEvaluate = encodingPlan.rgbaNumShapesToEvaluate;
 
         for (int shapeIter = 0; shapeIter < numShapesToEvaluate; shapeIter++)
         {
@@ -1299,23 +1134,17 @@ void cvtt::Internal::BC7Computer::TrySinglePlane(uint32_t flags, const MUInt15 p
                     }
                     epSelector.FinishPass(epPass);
                 }
-                temps.unfinishedRGBA[shapeIter] = epSelector.GetEndpoints(channelWeights);
+                temps.unfinishedRGBA[shape] = epSelector.GetEndpoints(channelWeights);
             }
             else
             {
-                temps.unfinishedRGBA[shapeIter] = temps.unfinishedRGB[rgbInitialEPCollapseList[shape]].ExpandTo<4>(255);
+                temps.unfinishedRGBA[shape] = temps.unfinishedRGB[shape].ExpandTo<4>(255);
             }
         }
     }
 
     for (uint16_t mode = 0; mode <= 7; mode++)
     {
-        if (!(flags & Flags::BC7_EnablePartitioning) && BC7Data::g_modes[mode].m_numSubsets != 1)
-            continue;
-
-        if (!(flags & Flags::BC7_Enable3Subsets) && BC7Data::g_modes[mode].m_numSubsets == 3)
-            continue;
-
         if (mode == 4 || mode == 5)
             continue;
 
@@ -1324,6 +1153,34 @@ void cvtt::Internal::BC7Computer::TrySinglePlane(uint32_t flags, const MUInt15 p
 
         if (mode == 7 && !allowMode7)
             continue;
+
+        uint64_t partitionEnabledBits = 0;
+        switch (mode)
+        {
+        case 0:
+            partitionEnabledBits = encodingPlan.mode0PartitionEnabled;
+            break;
+        case 1:
+            partitionEnabledBits = encodingPlan.mode1PartitionEnabled;
+            break;
+        case 2:
+            partitionEnabledBits = encodingPlan.mode2PartitionEnabled;
+            break;
+        case 3:
+            partitionEnabledBits = encodingPlan.mode3PartitionEnabled;
+            break;
+        case 6:
+            partitionEnabledBits = encodingPlan.mode6Enabled ? 1 : 0;
+            break;
+        case 7:
+            if (anyBlockHasAlpha)
+                partitionEnabledBits = encodingPlan.mode7RGBAPartitionEnabled;
+            else
+                partitionEnabledBits = encodingPlan.mode7RGBPartitionEnabled;
+            break;
+        default:
+            break;
+        }
 
         bool isRGB = (mode < 4);
 
@@ -1341,19 +1198,16 @@ void cvtt::Internal::BC7Computer::TrySinglePlane(uint32_t flags, const MUInt15 p
 
         int numShapes;
         const int *shapeList;
-        const int *shapeCollapseList;
 
         if (numSubsets == 1)
         {
             numShapes = BC7Data::g_numShapes1;
             shapeList = BC7Data::g_shapeList1;
-            shapeCollapseList = BC7Data::g_shapeList1Collapse;
         }
         else if (numSubsets == 2)
         {
             numShapes = BC7Data::g_numShapes2;
             shapeList = BC7Data::g_shapeList2;
-            shapeCollapseList = BC7Data::g_shapeList2Collapse;
         }
         else
         {
@@ -1362,26 +1216,36 @@ void cvtt::Internal::BC7Computer::TrySinglePlane(uint32_t flags, const MUInt15 p
             {
                 numShapes = BC7Data::g_numShapes3Short;
                 shapeList = BC7Data::g_shapeList3Short;
-                shapeCollapseList = BC7Data::g_shapeList3ShortCollapse;
             }
             else
             {
                 assert(numPartitions == 64);
                 numShapes = BC7Data::g_numShapes3;
                 shapeList = BC7Data::g_shapeList3;
-                shapeCollapseList = BC7Data::g_shapeList3Collapse;
             }
         }
 
-        for (int slot = 0; slot < BC7Data::g_maxFragmentsPerMode; slot++)
+        for (int slot = 0; slot < BC7Data::g_numShapesAll; slot++)
             temps.shapeBestError[slot] = ParallelMath::MakeFloat(FLT_MAX);
 
         for (int shapeIter = 0; shapeIter < numShapes; shapeIter++)
         {
             int shape = shapeList[shapeIter];
+
+            int numTweakRounds = 0;
+            if (isRGB)
+                numTweakRounds = encodingPlan.seedPointsForShapeRGB[shape];
+            else
+                numTweakRounds = encodingPlan.seedPointsForShapeRGBA[shape];
+
+            if (numTweakRounds == 0)
+                continue;
+
+            if (numTweakRounds > MaxTweakRounds)
+                numTweakRounds = MaxTweakRounds;
+
             int shapeStart = BC7Data::g_shapeRanges[shape][0];
             int shapeLength = BC7Data::g_shapeRanges[shape][1];
-            int shapeCollapsedEvalIndex = shapeCollapseList[shape];
 
             AggregatedError<1> alphaAggError;
             if (isRGB && anyBlockHasAlpha)
@@ -1399,20 +1263,18 @@ void cvtt::Internal::BC7Computer::TrySinglePlane(uint32_t flags, const MUInt15 p
             float alphaWeightsSq[1] = { channelWeightsSq[3] };
             MFloat staticAlphaError = alphaAggError.Finalize(flags, alphaWeightsSq);
 
-            assert(shapeCollapsedEvalIndex >= 0);
-
             MUInt15 tweakBaseEP[MaxTweakRounds][2][4];
 
             for (int tweak = 0; tweak < numTweakRounds; tweak++)
             {
                 if (isRGB)
                 {
-                    temps.unfinishedRGB[rgbInitialEPCollapseList[shape]].FinishLDR(tweak, 1 << indexPrec, tweakBaseEP[tweak][0], tweakBaseEP[tweak][1]);
+                    temps.unfinishedRGB[shape].FinishLDR(tweak, 1 << indexPrec, tweakBaseEP[tweak][0], tweakBaseEP[tweak][1]);
                     tweakBaseEP[tweak][0][3] = tweakBaseEP[tweak][1][3] = ParallelMath::MakeUInt15(255);
                 }
                 else
                 {
-                    temps.unfinishedRGBA[rgbaInitialEPCollapseList[shape]].FinishLDR(tweak, 1 << indexPrec, tweakBaseEP[tweak][0], tweakBaseEP[tweak][1]);
+                    temps.unfinishedRGBA[shape].FinishLDR(tweak, 1 << indexPrec, tweakBaseEP[tweak][0], tweakBaseEP[tweak][1]);
                 }
             }
 
@@ -1538,7 +1400,7 @@ void cvtt::Internal::BC7Computer::TrySinglePlane(uint32_t flags, const MUInt15 p
                         ParallelMath::FloatCompFlag shapeErrorBetter;
                         ParallelMath::Int16CompFlag shapeErrorBetter16;
 
-                        shapeErrorBetter = ParallelMath::Less(shapeError, temps.shapeBestError[shapeCollapsedEvalIndex]);
+                        shapeErrorBetter = ParallelMath::Less(shapeError, temps.shapeBestError[shape]);
                         shapeErrorBetter16 = ParallelMath::FloatFlagToInt16(shapeErrorBetter);
 
                         if (ParallelMath::AnySet(shapeErrorBetter16))
@@ -1555,10 +1417,10 @@ void cvtt::Internal::BC7Computer::TrySinglePlane(uint32_t flags, const MUInt15 p
 
                             if (punchThroughOK)
                             {
-                                ParallelMath::ConditionalSet(temps.shapeBestError[shapeCollapsedEvalIndex], shapeErrorBetter, shapeError);
+                                ParallelMath::ConditionalSet(temps.shapeBestError[shape], shapeErrorBetter, shapeError);
                                 for (int epi = 0; epi < 2; epi++)
                                     for (int ch = 0; ch < numRealChannels; ch++)
-                                        ParallelMath::ConditionalSet(temps.shapeBestEP[shapeCollapsedEvalIndex][epi][ch], shapeErrorBetter16, ep[epi][ch]);
+                                        ParallelMath::ConditionalSet(temps.shapeBestEP[shape][epi][ch], shapeErrorBetter16, ep[epi][ch]);
 
                                 for (int pxi = 0; pxi < shapeLength; pxi++)
                                     ParallelMath::ConditionalSet(temps.fragmentBestIndexes[shapeStart + pxi], shapeErrorBetter16, indexes[pxi]);
@@ -1590,8 +1452,8 @@ void cvtt::Internal::BC7Computer::TrySinglePlane(uint32_t flags, const MUInt15 p
                     average[ch] = ParallelMath::ToFloat(total[ch]) * rcpShapeLength;
 
                 const uint8_t *fragment = BC7Data::g_fragments + shapeStart;
-                MFloat &shapeBestError = temps.shapeBestError[shapeCollapsedEvalIndex];
-                MUInt15(&shapeBestEP)[2][4] = temps.shapeBestEP[shapeCollapsedEvalIndex];
+                MFloat &shapeBestError = temps.shapeBestError[shape];
+                MUInt15 (&shapeBestEP)[2][4] = temps.shapeBestEP[shape];
                 MUInt15 *fragmentBestIndexes = temps.fragmentBestIndexes + shapeStart;
 
                 const cvtt::Tables::BC7SC::Table **scTables = NULL;
@@ -1708,8 +1570,40 @@ void cvtt::Internal::BC7Computer::TrySinglePlane(uint32_t flags, const MUInt15 p
             }
         } // shapeIter
 
+        uint64_t partitionsEnabledBits = 0xffffffffffffffffULL;
+
+        switch (mode)
+        {
+        case 0:
+            partitionsEnabledBits = encodingPlan.mode0PartitionEnabled;
+            break;
+        case 1:
+            partitionsEnabledBits = encodingPlan.mode1PartitionEnabled;
+            break;
+        case 2:
+            partitionsEnabledBits = encodingPlan.mode2PartitionEnabled;
+            break;
+        case 3:
+            partitionsEnabledBits = encodingPlan.mode3PartitionEnabled;
+            break;
+        case 6:
+            partitionsEnabledBits = encodingPlan.mode6Enabled ? 1 : 0;
+            break;
+        case 7:
+            if (anyBlockHasAlpha)
+                partitionEnabledBits = encodingPlan.mode7RGBAPartitionEnabled;
+            else
+                partitionEnabledBits = encodingPlan.mode7RGBPartitionEnabled;
+            break;
+        default:
+            break;
+        };
+
         for (uint16_t partition = 0; partition < numPartitions; partition++)
         {
+            if (((partitionsEnabledBits >> partition) & 1) == 0)
+                continue;
+
             const int *partitionShapes;
             if (numSubsets == 1)
                 partitionShapes = BC7Data::g_shapes1[partition];
@@ -1723,10 +1617,22 @@ void cvtt::Internal::BC7Computer::TrySinglePlane(uint32_t flags, const MUInt15 p
 
             MFloat totalError = ParallelMath::MakeFloatZero();
             for (int subset = 0; subset < numSubsets; subset++)
-                totalError = totalError + temps.shapeBestError[shapeCollapseList[partitionShapes[subset]]];
+                totalError = totalError + temps.shapeBestError[partitionShapes[subset]];
 
             ParallelMath::FloatCompFlag errorBetter = ParallelMath::Less(totalError, work.m_error);
             ParallelMath::Int16CompFlag errorBetter16 = ParallelMath::FloatFlagToInt16(errorBetter);
+
+            if (mode == 7 && anyBlockHasAlpha)
+            {
+                // Some lanes could be better, but we filter them out to ensure consistency with scalar
+                bool isRGBAllowedForThisPartition = (((encodingPlan.mode7RGBPartitionEnabled >> partition) & 1) != 0);
+
+                if (!isRGBAllowedForThisPartition)
+                {
+                    errorBetter16 = (errorBetter16 & blockHasNonMaxAlpha);
+                    errorBetter = ParallelMath::Int16FlagToFloat(errorBetter16);
+                }
+            }
 
             if (ParallelMath::AnySet(errorBetter16))
             {
@@ -1735,11 +1641,10 @@ void cvtt::Internal::BC7Computer::TrySinglePlane(uint32_t flags, const MUInt15 p
                     int shape = partitionShapes[subset];
                     int shapeStart = BC7Data::g_shapeRanges[shape][0];
                     int shapeLength = BC7Data::g_shapeRanges[shape][1];
-                    int shapeCollapsedEvalIndex = shapeCollapseList[shape];
 
                     for (int epi = 0; epi < 2; epi++)
                         for (int ch = 0; ch < 4; ch++)
-                            ParallelMath::ConditionalSet(work.m_ep[subset][epi][ch], errorBetter16, temps.shapeBestEP[shapeCollapsedEvalIndex][epi][ch]);
+                            ParallelMath::ConditionalSet(work.m_ep[subset][epi][ch], errorBetter16, temps.shapeBestEP[shape][epi][ch]);
 
                     for (int pxi = 0; pxi < shapeLength; pxi++)
                     {
@@ -1748,7 +1653,7 @@ void cvtt::Internal::BC7Computer::TrySinglePlane(uint32_t flags, const MUInt15 p
                     }
                 }
 
-                work.m_error = ParallelMath::Min(totalError, work.m_error);
+                ParallelMath::ConditionalSet(work.m_error, errorBetter, totalError);
                 ParallelMath::ConditionalSet(work.m_mode, errorBetter16, ParallelMath::MakeUInt15(mode));
                 ParallelMath::ConditionalSet(work.m_u.m_partition, errorBetter16, ParallelMath::MakeUInt15(partition));
             }
@@ -1756,24 +1661,15 @@ void cvtt::Internal::BC7Computer::TrySinglePlane(uint32_t flags, const MUInt15 p
     }
 }
 
-void cvtt::Internal::BC7Computer::TryDualPlane(uint32_t flags, const MUInt15 pixels[16][4], const MFloat floatPixels[16][4], const float channelWeights[4], int numTweakRounds, int numRefineRounds, BC67::WorkInfo& work, const ParallelMath::RoundTowardNearestForScope *rtn)
+void cvtt::Internal::BC7Computer::TryDualPlane(uint32_t flags, const MUInt15 pixels[16][4], const MFloat floatPixels[16][4], const float channelWeights[4], const BC7EncodingPlan &encodingPlan, int numRefineRounds, BC67::WorkInfo& work, const ParallelMath::RoundTowardNearestForScope *rtn)
 {
     // TODO: These error calculations are not optimal for weight-by-alpha, but this routine needs to be mostly rewritten for that.
     // The alpha/color solutions are co-dependent in that case, but a good way to solve it would probably be to
     // solve the alpha channel first, then solve the RGB channels, which in turn breaks down into two cases:
     // - Separate alpha channel, then weighted RGB
     // - Alpha+2 other channels, then the independent channel
-
-    if (!(flags & Flags::BC7_EnableDualPlane))
-        return;
-
     if (numRefineRounds < 1)
         numRefineRounds = 1;
-
-    if (numTweakRounds < 1)
-        numTweakRounds = 1;
-    else if (numTweakRounds > MaxTweakRounds)
-        numTweakRounds = MaxTweakRounds;
 
     float channelWeightsSq[4];
     for (int ch = 0; ch < 4; ch++)
@@ -1781,8 +1677,21 @@ void cvtt::Internal::BC7Computer::TryDualPlane(uint32_t flags, const MUInt15 pix
 
     for (uint16_t mode = 4; mode <= 5; mode++)
     {
+        int numSP[2] = { 0, 0 };
+
         for (uint16_t rotation = 0; rotation < 4; rotation++)
         {
+            if (mode == 4)
+            {
+                numSP[0] = encodingPlan.mode4SP[rotation][0];
+                numSP[1] = encodingPlan.mode4SP[rotation][1];
+            }
+            else
+                numSP[0] = numSP[1] = encodingPlan.mode5SP[rotation];
+
+            if (numSP[0] == 0 && numSP[1] == 0)
+                continue;
+
             int alphaChannel = (rotation + 3) & 3;
             int redChannel = (rotation == 1) ? 3 : 0;
             int greenChannel = (rotation == 2) ? 3 : 1;
@@ -1815,6 +1724,14 @@ void cvtt::Internal::BC7Computer::TryDualPlane(uint32_t flags, const MUInt15 pix
 
             for (uint16_t indexSelector = 0; indexSelector < maxIndexSelector; indexSelector++)
             {
+                int numTweakRounds = numSP[indexSelector];
+
+                if (numTweakRounds <= 0)
+                    continue;
+
+                if (numTweakRounds > MaxTweakRounds)
+                    numTweakRounds = MaxTweakRounds;
+
                 EndpointSelector<3, 8> rgbSelector;
 
                 for (int epPass = 0; epPass < NumEndpointSelectorPasses; epPass++)
@@ -2055,7 +1972,7 @@ void cvtt::Internal::BC7Computer::Swap(T& a, T& b)
     b = temp;
 }
 
-void cvtt::Internal::BC7Computer::Pack(uint32_t flags, const PixelBlockU8* inputs, uint8_t* packedBlocks, const float channelWeights[4], int numTweakRounds, int numRefineRounds)
+void cvtt::Internal::BC7Computer::Pack(uint32_t flags, const PixelBlockU8* inputs, uint8_t* packedBlocks, const float channelWeights[4], const BC7EncodingPlan &encodingPlan, int numRefineRounds)
 {
     MUInt15 pixels[16][4];
     MFloat floatPixels[16][4];
@@ -2079,8 +1996,8 @@ void cvtt::Internal::BC7Computer::Pack(uint32_t flags, const PixelBlockU8* input
 
     {
         ParallelMath::RoundTowardNearestForScope rtn;
-        TrySinglePlane(flags, pixels, floatPixels, channelWeights, numTweakRounds, numRefineRounds, work, &rtn);
-        TryDualPlane(flags, pixels, floatPixels, channelWeights, numTweakRounds, numRefineRounds, work, &rtn);
+        TrySinglePlane(flags, pixels, floatPixels, channelWeights, encodingPlan, numRefineRounds, work, &rtn);
+        TryDualPlane(flags, pixels, floatPixels, channelWeights, encodingPlan, numRefineRounds, work, &rtn);
     }
 
     for (int block = 0; block < ParallelMath::ParallelSize; block++)
@@ -3369,6 +3286,200 @@ void cvtt::Internal::BC6HComputer::UnpackOne(PixelBlockF16 &output, const uint8_
         }
         output.m_pixels[px][3] = 0x3c00;	// 1.0
     }
+}
+
+void cvtt::Kernels::ConfigureBC7EncodingPlanFromQuality(BC7EncodingPlan &encodingPlan, int quality)
+{
+    static const int kMaxQuality = 100;
+
+    if (quality < 1)
+        quality = 1;
+    else if (quality > kMaxQuality)
+        quality = kMaxQuality;
+
+    const int numRGBModes = cvtt::Tables::BC7Prio::g_bc7NumPrioCodesRGB * quality / kMaxQuality;
+    const int numRGBAModes = cvtt::Tables::BC7Prio::g_bc7NumPrioCodesRGBA * quality / kMaxQuality;
+
+    const uint16_t *prioLists[] = { cvtt::Tables::BC7Prio::g_bc7PrioCodesRGB, cvtt::Tables::BC7Prio::g_bc7PrioCodesRGBA };
+    const int prioListSizes[] = { numRGBModes, numRGBAModes };
+
+    BC7FineTuningParams ftParams;
+    memset(&ftParams, 0, sizeof(ftParams));
+
+    for (int listIndex = 0; listIndex < 2; listIndex++)
+    {
+        int prioListSize = prioListSizes[listIndex];
+        const uint16_t *prioList = prioLists[listIndex];
+
+        for (int prioIndex = 0; prioIndex < prioListSize; prioIndex++)
+        {
+            const uint16_t packedMode = prioList[prioIndex];
+
+            uint8_t seedPoints = static_cast<uint8_t>(cvtt::Tables::BC7Prio::UnpackSeedPointCount(packedMode));
+            int mode = cvtt::Tables::BC7Prio::UnpackMode(packedMode);
+
+            switch (mode)
+            {
+            case 0:
+                ftParams.mode0SP[cvtt::Tables::BC7Prio::UnpackPartition(packedMode)] = seedPoints;
+                break;
+            case 1:
+                ftParams.mode1SP[cvtt::Tables::BC7Prio::UnpackPartition(packedMode)] = seedPoints;
+                break;
+            case 2:
+                ftParams.mode2SP[cvtt::Tables::BC7Prio::UnpackPartition(packedMode)] = seedPoints;
+                break;
+            case 3:
+                ftParams.mode3SP[cvtt::Tables::BC7Prio::UnpackPartition(packedMode)] = seedPoints;
+                break;
+            case 4:
+                ftParams.mode4SP[cvtt::Tables::BC7Prio::UnpackRotation(packedMode)][cvtt::Tables::BC7Prio::UnpackIndexSelector(packedMode)] = seedPoints;
+                break;
+            case 5:
+                ftParams.mode5SP[cvtt::Tables::BC7Prio::UnpackRotation(packedMode)] = seedPoints;
+                break;
+            case 6:
+                ftParams.mode6SP = seedPoints;
+                break;
+            case 7:
+                ftParams.mode7SP[cvtt::Tables::BC7Prio::UnpackPartition(packedMode)] = seedPoints;
+                break;
+            }
+        }
+    }
+
+    ConfigureBC7EncodingPlanFromFineTuningParams(encodingPlan, ftParams);
+}
+
+// Generates a BC7 encoding plan from fine-tuning parameters.
+bool cvtt::Kernels::ConfigureBC7EncodingPlanFromFineTuningParams(BC7EncodingPlan &encodingPlan, const BC7FineTuningParams &params)
+{
+    memset(&encodingPlan, 0, sizeof(encodingPlan));
+
+    // Mode 0
+    for (int partition = 0; partition < 16; partition++)
+    {
+        uint8_t sp = params.mode0SP[partition];
+        if (sp == 0)
+            continue;
+
+        encodingPlan.mode0PartitionEnabled |= static_cast<uint16_t>(1) << partition;
+
+        for (int subset = 0; subset < 3; subset++)
+        {
+            int shape = cvtt::Internal::BC7Data::g_shapes3[partition][subset];
+            encodingPlan.seedPointsForShapeRGB[shape] = std::max(encodingPlan.seedPointsForShapeRGB[shape], sp);
+        }
+    }
+
+    // Mode 1
+    for (int partition = 0; partition < 64; partition++)
+    {
+        uint8_t sp = params.mode1SP[partition];
+        if (sp == 0)
+            continue;
+
+        encodingPlan.mode1PartitionEnabled |= static_cast<uint64_t>(1) << partition;
+
+        for (int subset = 0; subset < 2; subset++)
+        {
+            int shape = cvtt::Internal::BC7Data::g_shapes2[partition][subset];
+            encodingPlan.seedPointsForShapeRGB[shape] = std::max(encodingPlan.seedPointsForShapeRGB[shape], sp);
+        }
+    }
+
+    // Mode 2
+    for (int partition = 0; partition < 64; partition++)
+    {
+        uint8_t sp = params.mode2SP[partition];
+        if (sp == 0)
+            continue;
+
+        encodingPlan.mode2PartitionEnabled |= static_cast<uint64_t>(1) << partition;
+
+        for (int subset = 0; subset < 3; subset++)
+        {
+            int shape = cvtt::Internal::BC7Data::g_shapes3[partition][subset];
+            encodingPlan.seedPointsForShapeRGB[shape] = std::max(encodingPlan.seedPointsForShapeRGB[shape], sp);
+        }
+    }
+
+    // Mode 3
+    for (int partition = 0; partition < 64; partition++)
+    {
+        uint8_t sp = params.mode3SP[partition];
+        if (sp == 0)
+            continue;
+
+        encodingPlan.mode3PartitionEnabled |= static_cast<uint64_t>(1) << partition;
+
+        for (int subset = 0; subset < 2; subset++)
+        {
+            int shape = cvtt::Internal::BC7Data::g_shapes2[partition][subset];
+            encodingPlan.seedPointsForShapeRGB[shape] = std::max(encodingPlan.seedPointsForShapeRGB[shape], sp);
+        }
+    }
+
+    // Mode 4
+    for (int rotation = 0; rotation < 4; rotation++)
+    {
+        for (int indexMode = 0; indexMode < 2; indexMode++)
+            encodingPlan.mode4SP[rotation][indexMode] = params.mode4SP[rotation][indexMode];
+    }
+
+    // Mode 5
+    for (int rotation = 0; rotation < 4; rotation++)
+        encodingPlan.mode5SP[rotation] = params.mode5SP[rotation];
+
+    // Mode 6
+    {
+        uint8_t sp = params.mode6SP;
+        if (sp != 0)
+        {
+            encodingPlan.mode6Enabled = true;
+
+            int shape = cvtt::Internal::BC7Data::g_shapes1[0][0];
+            encodingPlan.seedPointsForShapeRGBA[shape] = std::max(encodingPlan.seedPointsForShapeRGBA[shape], sp);
+        }
+    }
+
+    // Mode 7
+    for (int partition = 0; partition < 64; partition++)
+    {
+        uint8_t sp = params.mode7SP[partition];
+        if (sp == 0)
+            continue;
+
+        encodingPlan.mode7RGBAPartitionEnabled |= static_cast<uint64_t>(1) << partition;
+
+        for (int subset = 0; subset < 2; subset++)
+        {
+            int shape = cvtt::Internal::BC7Data::g_shapes2[partition][subset];
+            encodingPlan.seedPointsForShapeRGBA[shape] = std::max(encodingPlan.seedPointsForShapeRGBA[shape], sp);
+        }
+    }
+
+    for (int i = 0; i < BC7EncodingPlan::kNumRGBShapes; i++)
+    {
+        if (encodingPlan.seedPointsForShapeRGB[i] > 0)
+        {
+            encodingPlan.rgbShapeList[encodingPlan.rgbNumShapesToEvaluate] = i;
+            encodingPlan.rgbNumShapesToEvaluate++;
+        }
+    }
+
+    for (int i = 0; i < BC7EncodingPlan::kNumRGBAShapes; i++)
+    {
+        if (encodingPlan.seedPointsForShapeRGBA[i] > 0)
+        {
+            encodingPlan.rgbaShapeList[encodingPlan.rgbaNumShapesToEvaluate] = i;
+            encodingPlan.rgbaNumShapesToEvaluate++;
+        }
+    }
+
+    encodingPlan.mode7RGBPartitionEnabled = (encodingPlan.mode7RGBAPartitionEnabled & ~encodingPlan.mode3PartitionEnabled);
+
+    return true;
 }
 
 #endif

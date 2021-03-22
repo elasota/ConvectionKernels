@@ -38,6 +38,7 @@ http://go.microsoft.com/fwlink/?LinkId=248926
 #include "ConvectionKernels_API.cpp"
 #include "ConvectionKernels_BC67.cpp"
 #include "ConvectionKernels_BC6H_IO.cpp"
+#include "ConvectionKernels_BC7_PrioData.cpp"
 #include "ConvectionKernels_BCCommon.cpp"
 #include "ConvectionKernels_ETC.cpp"
 #include "ConvectionKernels_IndexSelector.cpp"

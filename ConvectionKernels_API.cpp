@@ -38,7 +38,7 @@ namespace cvtt
 {
     namespace Kernels
     {
-        void EncodeBC7(uint8_t *pBC, const PixelBlockU8 *pBlocks, const cvtt::Options &options)
+        void EncodeBC7(uint8_t *pBC, const PixelBlockU8 *pBlocks, const cvtt::Options &options, const BC7EncodingPlan &encodingPlan)
         {
             assert(pBlocks);
             assert(pBC);
@@ -48,7 +48,7 @@ namespace cvtt
 
             for (size_t blockBase = 0; blockBase < cvtt::NumParallelBlocks; blockBase += ParallelMath::ParallelSize)
             {
-                Internal::BC7Computer::Pack(options.flags, pBlocks + blockBase, pBC, channelWeights, options.seedPoints, options.refineRoundsBC7);
+                Internal::BC7Computer::Pack(options.flags, pBlocks + blockBase, pBC, channelWeights, encodingPlan, options.refineRoundsBC7);
                 pBC += ParallelMath::ParallelSize * 16;
             }
         }

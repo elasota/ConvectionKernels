@@ -35,9 +35,10 @@ Create an Options structure and fill it out:
   * redWeight: Red channel relative importance
   * blueWeight: Blue channel relative importance
   * alphaWeight: Alpha channel relative importance
-  * seedPoints: Number of seed points to try, from 1 to 4.  Higher values improve quality.
 
-Once you've done that, call the corresponding encode function to digest the input blocks and emit output blocks.
+For some modes, you must pass an encoding plan, which controls how the encoder will behave.  You should NOT attempt to initialize the encoding plan yourself, either use a default-initialized encoding plan (which will run at maximum quality), or use ConfigureBC7EncodingPlanFromQuality or ConfigureBC7EncodingPlanFromFineTuningParams to configure a lower-quality encoding plan.  Configuring an encoding plan is somewhat slow and you should only do it once per encode job.
+
+Once you've done both of those things, call the corresponding encode function to digest the input blocks and emit output blocks.
 
 **VERY IMPORTANT**: The encode functions must be given a list of cvtt::NumParallelBlocks blocks, and will emit cvtt::NumParallelBlocks output blocks.  If you want to encode fewer blocks, then you must pad the input structure with unused block data, and the output buffer must still contain enough space.
 

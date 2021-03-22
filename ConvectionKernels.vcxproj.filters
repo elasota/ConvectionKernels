@@ -42,6 +42,9 @@
     <ClCompile Include="ConvectionKernels_Util.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="ConvectionKernels_BC7_PrioData.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="ConvectionKernels_AggregatedError.h">
@@ -108,6 +111,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="ConvectionKernels_FakeBT709_Rounding.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ConvectionKernels_BC7_Prio.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
