@@ -42,6 +42,8 @@ http://go.microsoft.com/fwlink/?LinkId=248926
 #include "ConvectionKernels_ParallelMath.h"
 #include "ConvectionKernels_FakeBT709_Rounding.h"
 
+#include <cmath>
+
 const int cvtt::Internal::ETCComputer::g_flipTables[2][2][8] =
 {
     {
